@@ -2,6 +2,8 @@ extends Node3D
 ## Pista: una linea centrale campionata, da cui nascono mesh, collisioni,
 ## ostacoli, checkpoint e arredamento della cameretta.
 
+const Props := preload("res://scripts/props.gd")
+
 const SUB := 24          # campioni per tratto tra due punti di controllo
 const THICK := 0.5       # spessore della pista
 
@@ -27,14 +29,14 @@ const CONTROL := [
 
 # Ostacoli: [distanza lungo la pista, posizione laterale da -1 a 1, tipo]
 const OBSTACLES := [
-	[70.0, -0.9, "cube"], [70.0, 0.9, "cube"],
-	[105.0, 0.0, "cyl"],
-	[135.0, 0.6, "cube"], [150.0, -0.6, "cyl"],
-	[185.0, 0.2, "cube"], [200.0, -0.5, "cube"],
-	[230.0, 0.5, "cyl"], [250.0, -0.2, "cube"],
-	[280.0, 0.5, "cube"], [295.0, -0.5, "cyl"],
-	[325.0, 0.0, "cube"], [345.0, 0.9, "cyl"], [345.0, -0.9, "cyl"],
-	[375.0, -0.3, "cube"], [390.0, 0.4, "cube"],
+	[70.0, -0.9, "brick"], [70.0, 0.9, "cubes"],
+	[105.0, 0.0, "rings"],
+	[135.0, 0.6, "duck"], [150.0, -0.6, "car"],
+	[185.0, 0.2, "dice"], [200.0, -0.5, "pencil"],
+	[230.0, 0.5, "pins"], [250.0, -0.2, "cubes"],
+	[280.0, 0.5, "brick"], [295.0, -0.5, "duck"],
+	[325.0, 0.0, "car"], [345.0, 0.9, "rings"], [345.0, -0.9, "pins"],
+	[375.0, -0.3, "dice"], [390.0, 0.4, "cubes"],
 ]
 
 const CHECKPOINT_EVERY := 100.0
@@ -255,11 +257,18 @@ func _build_obstacles() -> void:
 		var half: float = widths[i] * 0.5 - 0.9
 		var base: Vector3 = pos_at(s) + rights[i] * lat * half
 		obstacle_list.append(Vector2(s, lat * half))
-		var col: Color = PALETTE[(k + 2) % PALETTE.size()]
-		if kind == "cube":
-			_add_box(self, Vector3(1.3, 1.3, 1.3), base + Vector3.UP * 0.65, col, true, _yaw_of(i))
-		else:
-			_add_cylinder(self, 0.6, 1.6, base + Vector3.UP * 0.8, col)
+		var prop: Dictionary = Props.build(kind, k)
+		var body := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		cs.shape = prop["shape"]
+		cs.position = prop["shape_pos"]
+		body.add_child(cs)
+		var visual: Node3D = prop["node"]
+		body.add_child(visual)
+		add_child(body)
+		var extra_yaw: float = prop["yaw"]
+		body.position = base + Vector3.DOWN * 0.04
+		body.rotation.y = _yaw_of(i) + extra_yaw
 		k += 1
 
 

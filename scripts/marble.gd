@@ -5,9 +5,9 @@ const Look := preload("res://scripts/marble_look.gd")
 
 # Modello di guida: la biglia accelera con la pendenza, frena con l'aria
 # e perde velocita' ogni volta che si sterza.
-const SLOPE_GAIN := 90.0     # spinta lungo la pista per unita' di pendenza
-const DRAG := 0.0175         # resistenza che cresce con il quadrato della velocita'
-const SCRUB := 0.15          # velocita' persa sterzando
+const SLOPE_GAIN := 110.0    # spinta lungo la pista per unita' di pendenza
+const DRAG := 0.02           # resistenza che cresce con il quadrato della velocita'
+const SCRUB := 0.10          # velocita' persa sterzando
 const MIN_SPEED := 6.0       # sotto questa soglia una piccola spinta evita lo stallo
 const LATERAL_SPEED := 9.0
 const ROLL_INERTIA := 1.4    # una sfera che rotola "pesa" 7/5: compensa la spinta
@@ -120,7 +120,7 @@ func _physics_process(_delta: float) -> void:
 	var vr: float = linear_velocity.dot(right)
 	var steer: float = get_steer()
 	var slope: float = -fwd.y
-	var acc: float = SLOPE_GAIN * slope - DRAG * vf * absf(vf) - SCRUB * absf(steer) * maxf(vf, 0.0)
+	var acc: float = SLOPE_GAIN * slope - DRAG * vf * absf(vf) - SCRUB * steer * steer * maxf(vf, 0.0)
 	if vf < MIN_SPEED:
 		acc = maxf(acc, (MIN_SPEED - vf) * 3.0)
 	apply_central_force(fwd * acc * mass * ROLL_INERTIA)

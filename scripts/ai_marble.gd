@@ -11,6 +11,7 @@ var track: Node3D
 var display_name: String = "Bot"
 var color: Color = Color.WHITE
 var skill: float = 1.0
+var base_skill: float = 1.0
 var lane: float = 0.0
 var phase: float = 0.0
 var s: float = 0.0
@@ -26,6 +27,7 @@ func setup(track_ref: Node3D, bot_name: String, bot_color: Color, bot_skill: flo
 	track = track_ref
 	display_name = bot_name
 	color = bot_color
+	base_skill = bot_skill
 	skill = bot_skill
 	lane = lane_offset
 	phase = randf() * TAU
@@ -37,6 +39,7 @@ func reset(start_s: float) -> void:
 	s = start_s
 	off = lane
 	speed = 0.0
+	skill = base_skill * randf_range(0.97, 1.03)   # ogni gara un po' diversa
 	finished = false
 	finish_time = -1.0
 	_place(0.0)
@@ -67,7 +70,7 @@ func tick(delta: float, race_time: float) -> void:
 	off = new_off
 
 	var slope: float = -track.dirs[i].y
-	var acc: float = Marble.SLOPE_GAIN * skill * slope - Marble.DRAG * speed * speed - Marble.SCRUB * steer * speed
+	var acc: float = Marble.SLOPE_GAIN * skill * slope - Marble.DRAG * speed * speed - Marble.SCRUB * steer * steer * speed
 	if speed < Marble.MIN_SPEED:
 		acc = maxf(acc, (Marble.MIN_SPEED - speed) * 3.0)
 	speed = maxf(speed + acc * delta, 0.0)

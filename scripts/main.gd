@@ -100,9 +100,9 @@ func _build_world() -> void:
 
 	# [nome, colore, abilita', corsia]
 	var bot_defs := [
-		["Bot Blu", Color(0.27, 0.48, 0.80), 0.93, -0.8],
-		["Bot Verde", Color(0.16, 0.62, 0.56), 0.98, 0.8],
-		["Bot Giallo", Color(1.00, 0.82, 0.25), 1.03, 2.4],
+		["Bot Blu", Color(0.27, 0.48, 0.80), 0.80, -0.8],
+		["Bot Verde", Color(0.16, 0.62, 0.56), 0.87, 0.8],
+		["Bot Giallo", Color(1.00, 0.82, 0.25), 0.94, 2.4],
 	]
 	for def: Array in bot_defs:
 		var bot: Node3D = AiScript.new()
@@ -348,12 +348,14 @@ func _run_shots() -> void:
 	player.auto_steer = true
 	await _wait(1.3)
 	await _shot("3_conto_alla_rovescia")
-	await _wait(6.0)
+	await _wait(5.7)
 	await _shot("4_gara_a")
-	await _wait(8.0)
+	await _wait(4.0)
 	await _shot("5_gara_b")
-	await _wait(8.0)
+	await _wait(4.0)
 	await _shot("6_gara_c")
+	await _wait(4.0)
+	await _shot("6_gara_d")
 	var guard: float = 0.0
 	while state != State.RESULTS and guard < 90.0:
 		await _wait(0.5)
