@@ -5,10 +5,10 @@ const Look := preload("res://scripts/marble_look.gd")
 
 # Modello di guida: la biglia accelera con la pendenza, frena con l'aria
 # e perde velocita' ogni volta che si sterza.
-const SLOPE_GAIN := 45.0     # spinta lungo la pista per unita' di pendenza
-const DRAG := 0.0109         # resistenza che cresce con il quadrato della velocita'
+const SLOPE_GAIN := 90.0     # spinta lungo la pista per unita' di pendenza
+const DRAG := 0.0175         # resistenza che cresce con il quadrato della velocita'
 const SCRUB := 0.15          # velocita' persa sterzando
-const MIN_SPEED := 4.0       # sotto questa soglia una piccola spinta evita lo stallo
+const MIN_SPEED := 6.0       # sotto questa soglia una piccola spinta evita lo stallo
 const LATERAL_SPEED := 9.0
 
 var track: Node3D

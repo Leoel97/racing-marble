@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GODOT_VERSION: "4.4.1"
 
@@ -87,8 +91,10 @@ jobs:
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libgl1-mesa-dri > /dev/null
           rm -rf "$RUNNER_TEMP/shots" && mkdir -p "$RUNNER_TEMP/shots"
-          timeout 240 xvfb-run -a -s "-screen 0 1560x720x24" godot --rendering-method gl_compatibility --rendering-driver opengl3 \
-            --resolution 1560x720 --fixed-fps 30 -- --shots="$RUNNER_TEMP/shots" 2>&1 | tail -40 || true
+          timeout -k 5 420 xvfb-run -a -s "-screen 0 1560x720x24" godot --rendering-method gl_compatibility --rendering-driver opengl3 \
+            --resolution 1560x720 --fixed-fps 15 -- --shots="$RUNNER_TEMP/shots" > shots.log 2>&1 < /dev/null || true
+          pkill -9 -f "godot" || true
+          grep -E "SHOT|SCRIPT ERROR|ERROR" shots.log | tail -30 || true
           ls -la "$RUNNER_TEMP/shots"
           cd "$RUNNER_TEMP/shots"
           git init -q -b ci-screens

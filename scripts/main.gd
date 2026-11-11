@@ -306,7 +306,7 @@ func _update_camera(delta: float, snap: bool) -> void:
 		# Nel menu la camera gira lentamente attorno alla biglia sulla griglia di partenza.
 		menu_angle += delta * 0.25
 		var grid_center: Vector3 = target + track.rights[player.track_idx] * 2.4
-		camera.global_position = grid_center + Vector3(sin(menu_angle) * 7.5, 2.6, cos(menu_angle) * 7.5)
+		camera.global_position = grid_center + Vector3(sin(menu_angle) * 5.5, 1.9, cos(menu_angle) * 5.5)
 		camera.look_at(grid_center + Vector3.UP * 0.4, Vector3.UP)
 		return
 	var fwd: Vector3 = track.dirs[player.track_idx]

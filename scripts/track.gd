@@ -8,8 +8,8 @@ const THICK := 0.5       # spessore della pista
 # Punti di controllo: [posizione, larghezza]. Si scende lungo -Z.
 const CONTROL := [
 	[Vector3(0, 36, 0), 8.0],
-	[Vector3(0, 35, -25), 8.0],
-	[Vector3(6, 32, -55), 7.0],
+	[Vector3(0, 33.5, -25), 8.0],
+	[Vector3(6, 31, -55), 7.0],
 	[Vector3(10, 27, -85), 6.0],
 	[Vector3(2, 25, -115), 6.0],
 	[Vector3(-8, 24, -145), 7.0],
