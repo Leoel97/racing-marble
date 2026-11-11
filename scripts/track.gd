@@ -9,22 +9,22 @@ const THICK := 0.5       # spessore della pista
 
 # Punti di controllo: [posizione, larghezza]. Si scende lungo -Z.
 const CONTROL := [
-	[Vector3(0, 36, 0), 8.0],
-	[Vector3(0, 33.5, -25), 8.0],
-	[Vector3(6, 31, -55), 7.0],
-	[Vector3(10, 27, -85), 6.0],
-	[Vector3(2, 25, -115), 6.0],
-	[Vector3(-8, 24, -145), 7.0],
-	[Vector3(-10, 20, -175), 5.5],
-	[Vector3(-2, 16, -205), 5.5],
+	[Vector3(0, 40, 0), 8.0],
+	[Vector3(0, 37.5, -25), 8.0],
+	[Vector3(6, 35, -55), 7.0],
+	[Vector3(10, 30, -85), 6.0],
+	[Vector3(2, 27.5, -115), 6.0],
+	[Vector3(-8, 25.5, -145), 7.0],
+	[Vector3(-10, 21, -175), 5.5],
+	[Vector3(-2, 17, -205), 5.5],
 	[Vector3(6, 15, -235), 6.0],
-	[Vector3(4, 14, -265), 5.0],
-	[Vector3(-4, 10.5, -295), 5.5],
-	[Vector3(-6, 8, -325), 6.0],
-	[Vector3(0, 6.5, -355), 7.0],
-	[Vector3(0, 5, -385), 8.0],
-	[Vector3(0, 4.3, -415), 8.0],
-	[Vector3(0, 4, -445), 8.0],
+	[Vector3(4, 13, -265), 5.0],
+	[Vector3(-4, 9.5, -295), 5.5],
+	[Vector3(-6, 7, -325), 6.0],
+	[Vector3(0, 5.5, -355), 7.0],
+	[Vector3(0, 4, -385), 8.0],
+	[Vector3(0, 2.8, -415), 8.0],
+	[Vector3(0, 1.8, -445), 8.0],
 ]
 
 # Ostacoli: [distanza lungo la pista, posizione laterale da -1 a 1, tipo]

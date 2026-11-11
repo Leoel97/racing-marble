@@ -100,9 +100,9 @@ func _build_world() -> void:
 
 	# [nome, colore, abilita', corsia]
 	var bot_defs := [
-		["Bot Blu", Color(0.27, 0.48, 0.80), 0.80, -0.8],
-		["Bot Verde", Color(0.16, 0.62, 0.56), 0.87, 0.8],
-		["Bot Giallo", Color(1.00, 0.82, 0.25), 0.94, 2.4],
+		["Bot Blu", Color(0.27, 0.48, 0.80), 0.73, -0.8],
+		["Bot Verde", Color(0.16, 0.62, 0.56), 0.80, 0.8],
+		["Bot Giallo", Color(1.00, 0.82, 0.25), 0.86, 2.4],
 	]
 	for def: Array in bot_defs:
 		var bot: Node3D = AiScript.new()
