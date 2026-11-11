@@ -183,7 +183,7 @@ func _go() -> void:
 	state = State.RACE
 	player.freeze = false
 	player.controls_enabled = true
-	ui.pop("VIA!", ui.YELLOW, 190, 0.5)
+	ui.pop("VIA!", UiScript.YELLOW, 190, 0.5)
 
 
 func _process(delta: float) -> void:
@@ -222,7 +222,7 @@ func _tick_race(delta: float) -> void:
 			player_finish_time = race_time
 			player.controls_enabled = false
 			player.linear_damp = 3.0
-			ui.pop("TRAGUARDO!", ui.YELLOW, 130)
+			ui.pop("TRAGUARDO!", UiScript.YELLOW, 130)
 			results_delay = 2.0
 	else:
 		results_delay -= delta
