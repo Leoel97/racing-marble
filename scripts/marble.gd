@@ -1,0 +1,103 @@
+extends RigidBody3D
+## Biglia del giocatore: avanza da sola, si sterza inclinando il telefono.
+
+const Look := preload("res://scripts/marble_look.gd")
+
+const TARGET_SPEED := 15.0
+const LATERAL_SPEED := 9.0
+
+var track: Node3D
+var track_idx: int = 0
+var progress: float = 0.0
+var controls_enabled: bool = false
+var invert: bool = false
+var sensitivity: float = 2.5
+var touch_steer: float = 0.0
+var auto_steer: bool = false   # usato solo dal test automatico
+
+var _respawn_pending: bool = false
+var _respawn_xform: Transform3D = Transform3D.IDENTITY
+
+
+func _ready() -> void:
+	mass = 1.0
+	continuous_cd = true
+	can_sleep = false
+	linear_damp = 0.05
+	angular_damp = 0.2
+	var pm := PhysicsMaterial.new()
+	pm.friction = 1.0
+	pm.bounce = 0.15
+	physics_material_override = pm
+	var shape := SphereShape3D.new()
+	shape.radius = Look.RADIUS
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	add_child(cs)
+	add_child(Look.make_mesh(Color(0.90, 0.22, 0.27), Color(1.0, 1.0, 1.0)))
+
+
+func get_steer() -> float:
+	if auto_steer:
+		var off: float = (global_position - track.pts[track_idx]).dot(track.rights[track_idx])
+		return clampf(-off * 0.8, -1.0, 1.0)
+	var g: Vector3 = Input.get_gravity()
+	if g.length() < 0.5:
+		g = Input.get_accelerometer()
+	var st: float = 0.0
+	if g.length() > 0.5:
+		st = g.x / 9.81 * sensitivity
+		if absf(st) < 0.04:
+			st = 0.0
+	if invert:
+		st = -st
+	st += touch_steer + Input.get_axis("ui_left", "ui_right")
+	return clampf(st, -1.0, 1.0)
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	# Riserva per provare senza sensori: tocca meta' sinistra/destra dello schermo.
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			var half: float = get_viewport().get_visible_rect().size.x * 0.5
+			touch_steer = -1.0 if touch.position.x < half else 1.0
+		else:
+			touch_steer = 0.0
+
+
+func _physics_process(_delta: float) -> void:
+	if track == null:
+		return
+	track_idx = track.nearest_index(global_position, track_idx)
+	progress = track.dist[track_idx]
+	if not controls_enabled or freeze:
+		return
+	var fwd: Vector3 = track.dirs[track_idx]
+	var right: Vector3 = track.rights[track_idx]
+	var vf: float = linear_velocity.dot(fwd)
+	var vr: float = linear_velocity.dot(right)
+	apply_central_force(fwd * clampf((TARGET_SPEED - vf) * 6.0, -10.0, 30.0))
+	apply_central_force(right * (get_steer() * LATERAL_SPEED - vr) * 10.0)
+
+
+func place_at(pos: Vector3, idx: int) -> void:
+	## Sposta la biglia (alla partenza o a un checkpoint) azzerando la velocita'.
+	track_idx = idx
+	if freeze:
+		global_position = pos
+		linear_velocity = Vector3.ZERO
+		angular_velocity = Vector3.ZERO
+		reset_physics_interpolation()
+	else:
+		_respawn_xform = Transform3D(Basis.IDENTITY, pos)
+		_respawn_pending = true
+
+
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if _respawn_pending:
+		_respawn_pending = false
+		state.transform = _respawn_xform
+		state.linear_velocity = Vector3.ZERO
+		state.angular_velocity = Vector3.ZERO
+		reset_physics_interpolation.call_deferred()
