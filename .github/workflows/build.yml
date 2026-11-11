@@ -75,7 +75,7 @@ jobs:
 
       - name: Test automatico (gara simulata)
         run: |
-          timeout 300 godot --headless --fixed-fps 60 --quit-after 2700 -- --autostart 2>&1 | tee run.log || true
+          timeout 300 godot --headless --fixed-fps 60 --quit-after 4200 -- --autostart 2>&1 | tee run.log || true
           if grep -E "SCRIPT ERROR|Parse Error|Failed to load script|Compile Error" import.log run.log; then
             echo "::error::Errori negli script"
             exit 1

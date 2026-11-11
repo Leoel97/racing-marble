@@ -15,6 +15,10 @@ var sensitivity: float = 2.5
 var touch_steer: float = 0.0
 var auto_steer: bool = false   # usato solo dal test automatico
 
+var _auto_target: float = 0.0
+var _auto_stuck: float = 0.0
+var _auto_hold: float = 0.0
+var _auto_side: float = 1.0
 var _respawn_pending: bool = false
 var _respawn_xform: Transform3D = Transform3D.IDENTITY
 
@@ -39,8 +43,7 @@ func _ready() -> void:
 
 func get_steer() -> float:
 	if auto_steer:
-		var off: float = (global_position - track.pts[track_idx]).dot(track.rights[track_idx])
-		return clampf(-off * 0.8, -1.0, 1.0)
+		return _autopilot()
 	var g: Vector3 = Input.get_gravity()
 	if g.length() < 0.5:
 		g = Input.get_accelerometer()
@@ -53,6 +56,26 @@ func get_steer() -> float:
 		st = -st
 	st += touch_steer + Input.get_axis("ui_left", "ui_right")
 	return clampf(st, -1.0, 1.0)
+
+
+func _autopilot() -> float:
+	## Pilota del test automatico: sta al centro e scarta di lato se resta bloccato.
+	var dt: float = get_physics_process_delta_time()
+	var off: float = (global_position - track.pts[track_idx]).dot(track.rights[track_idx])
+	if _auto_hold > 0.0:
+		_auto_hold -= dt
+		if _auto_hold <= 0.0:
+			_auto_target = 0.0
+	elif linear_velocity.dot(track.dirs[track_idx]) < 3.0:
+		_auto_stuck += dt
+		if _auto_stuck > 0.6:
+			_auto_stuck = 0.0
+			_auto_side = -_auto_side
+			_auto_target = _auto_side * 1.8
+			_auto_hold = 2.5
+	else:
+		_auto_stuck = 0.0
+	return clampf((_auto_target - off) * 0.8, -1.0, 1.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:

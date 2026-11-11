@@ -395,6 +395,8 @@ func _show_results() -> void:
 		var time_text: String = _format_time(t) if t >= 0.0 else "in gara"
 		text += "%d.  %s   %s\n" % [i + 1, row["name"], time_text]
 	results_list.text = text.strip_edges()
+	if smoke_test:
+		print("SMOKE RESULTS\n" + results_list.text)
 	results_box.visible = true
 
 
