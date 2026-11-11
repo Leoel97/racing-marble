@@ -65,23 +65,34 @@ func get_steer() -> float:
 
 
 func _autopilot() -> float:
-	## Pilota del test automatico: sta al centro e scarta di lato se resta bloccato.
+	## Pilota del test automatico: sta al centro, schiva gli ostacoli in arrivo
+	## e scarta di lato se resta comunque bloccato.
 	var dt: float = get_physics_process_delta_time()
-	var off: float = (global_position - track.pts[track_idx]).dot(track.rights[track_idx])
+	var right: Vector3 = track.rights[track_idx]
+	var off: float = (global_position - track.pts[track_idx]).dot(right)
+	var limit: float = maxf(track.widths[track_idx] * 0.5 - 0.9, 0.0)
+	var target: float = 0.0
+	for o: Vector2 in track.obstacle_list:
+		var ahead: float = o.x - progress
+		if ahead > -1.5 and ahead < 22.0 and absf(target - o.y) < 1.6:
+			var side: float = 1.0 if off >= o.y else -1.0
+			var dodge: float = o.y + side * 1.9
+			if absf(dodge) > limit:
+				dodge = o.y - side * 1.9
+			target = dodge
 	if _auto_hold > 0.0:
 		_auto_hold -= dt
-		if _auto_hold <= 0.0:
-			_auto_target = 0.0
+		target = _auto_target
 	elif linear_velocity.dot(track.dirs[track_idx]) < 3.0:
 		_auto_stuck += dt
 		if _auto_stuck > 0.6:
 			_auto_stuck = 0.0
 			_auto_side = -_auto_side
-			_auto_target = _auto_side * 1.8
-			_auto_hold = 2.5
+			_auto_target = clampf(off + _auto_side * 2.0, -limit, limit)
+			_auto_hold = 1.5
 	else:
 		_auto_stuck = 0.0
-	return clampf((_auto_target - off) * 0.8, -1.0, 1.0)
+	return clampf((target - off) * 0.8, -1.0, 1.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:

@@ -53,7 +53,7 @@ func tick(delta: float, race_time: float) -> void:
 	var target: float = lane + sin(s * 0.05 + phase) * w * 0.12
 	for o: Vector2 in track.obstacle_list:
 		var ahead: float = o.x - s
-		if ahead > -1.5 and ahead < 16.0 and absf(target - o.y) < 1.5:
+		if ahead > -1.5 and ahead < 20.0 and absf(target - o.y) < 1.5:
 			var side: float = 1.0 if target >= o.y else -1.0
 			var dodge: float = o.y + side * 1.7
 			if absf(dodge) > limit:
