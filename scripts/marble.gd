@@ -3,13 +3,17 @@ extends RigidBody3D
 
 const Look := preload("res://scripts/marble_look.gd")
 
-# Modello di guida: la biglia accelera con la pendenza, frena con l'aria
-# e perde velocita' ogni volta che si sterza.
+# Modello di guida realistico: la biglia accelera con la pendenza ed e' frenata
+# dall'aria. Inclinare il telefono da' una spinta laterale (non una velocita'):
+# la biglia ha inerzia anche di lato e un po' di attrito la smorza.
+# Inclinare avanti o indietro non fa nulla: non si puo' frenare.
 const SLOPE_GAIN := 110.0    # spinta lungo la pista per unita' di pendenza
 const DRAG := 0.02           # resistenza che cresce con il quadrato della velocita'
-const SCRUB := 0.10          # velocita' persa sterzando
+const SCRUB := 0.10          # costo delle manovre, usato solo dagli avversari
 const MIN_SPEED := 6.0       # sotto questa soglia una piccola spinta evita lo stallo
-const LATERAL_SPEED := 9.0
+const LATERAL_ACCEL := 36.0  # spinta laterale a inclinazione piena
+const LATERAL_GRIP := 4.0    # attrito laterale: smorza lo scivolamento di lato
+const LATERAL_SPEED := 9.0   # riferimento per gli avversari
 const ROLL_INERTIA := 1.4    # una sfera che rotola "pesa" 7/5: compensa la spinta
 
 var track: Node3D
@@ -56,7 +60,7 @@ func get_steer() -> float:
 		g = Input.get_accelerometer()
 	var st: float = 0.0
 	if g.length() > 0.5:
-		st = g.x / 9.81 * sensitivity
+		st = g.x / g.length() * sensitivity
 		if absf(st) < 0.04:
 			st = 0.0
 	if invert:
@@ -93,7 +97,8 @@ func _autopilot() -> float:
 			_auto_hold = 1.5
 	else:
 		_auto_stuck = 0.0
-	return clampf((target - off) * 0.8, -1.0, 1.0)
+	var vr: float = linear_velocity.dot(right)
+	return clampf((target - off) * 0.5 - vr * 0.15, -1.0, 1.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -120,11 +125,11 @@ func _physics_process(_delta: float) -> void:
 	var vr: float = linear_velocity.dot(right)
 	var steer: float = get_steer()
 	var slope: float = -fwd.y
-	var acc: float = SLOPE_GAIN * slope - DRAG * vf * absf(vf) - SCRUB * steer * steer * maxf(vf, 0.0)
+	var acc: float = SLOPE_GAIN * slope - DRAG * vf * absf(vf)
 	if vf < MIN_SPEED:
 		acc = maxf(acc, (MIN_SPEED - vf) * 3.0)
 	apply_central_force(fwd * acc * mass * ROLL_INERTIA)
-	apply_central_force(right * (steer * LATERAL_SPEED - vr) * 10.0 * mass)
+	apply_central_force(right * (steer * LATERAL_ACCEL - vr * LATERAL_GRIP) * mass * ROLL_INERTIA)
 
 
 func place_at(pos: Vector3, idx: int) -> void:
