@@ -154,7 +154,7 @@ func _reset_race() -> void:
 	last_checkpoint = track.start_s
 	player.freeze = true
 	player.controls_enabled = false
-	player.linear_damp = 0.05
+	player.linear_damp = 0.0
 	player.invert = invert_steer
 	player.sensitivity = sensitivity
 	player.place_at(track.spawn_point(track.start_s, -2.4), track.index_at(track.start_s))

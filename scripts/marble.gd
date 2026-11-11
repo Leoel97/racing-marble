@@ -10,6 +10,7 @@ const DRAG := 0.0175         # resistenza che cresce con il quadrato della veloc
 const SCRUB := 0.15          # velocita' persa sterzando
 const MIN_SPEED := 6.0       # sotto questa soglia una piccola spinta evita lo stallo
 const LATERAL_SPEED := 9.0
+const ROLL_INERTIA := 1.4    # una sfera che rotola "pesa" 7/5: compensa la spinta
 
 var track: Node3D
 var body_color: Color = Color(0.90, 0.22, 0.27)
@@ -33,8 +34,8 @@ func _ready() -> void:
 	mass = 1.0
 	continuous_cd = true
 	can_sleep = false
-	linear_damp = 0.05
-	angular_damp = 0.2
+	linear_damp = 0.0
+	angular_damp = 0.0
 	var pm := PhysicsMaterial.new()
 	pm.friction = 1.0
 	pm.bounce = 0.15
@@ -122,7 +123,7 @@ func _physics_process(_delta: float) -> void:
 	var acc: float = SLOPE_GAIN * slope - DRAG * vf * absf(vf) - SCRUB * absf(steer) * maxf(vf, 0.0)
 	if vf < MIN_SPEED:
 		acc = maxf(acc, (MIN_SPEED - vf) * 3.0)
-	apply_central_force(fwd * acc * mass)
+	apply_central_force(fwd * acc * mass * ROLL_INERTIA)
 	apply_central_force(right * (steer * LATERAL_SPEED - vr) * 10.0 * mass)
 
 

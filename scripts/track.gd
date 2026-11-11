@@ -27,13 +27,13 @@ const CONTROL := [
 
 # Ostacoli: [distanza lungo la pista, posizione laterale da -1 a 1, tipo]
 const OBSTACLES := [
-	[70.0, -0.5, "cube"], [70.0, 0.6, "cube"],
+	[70.0, -0.9, "cube"], [70.0, 0.9, "cube"],
 	[105.0, 0.0, "cyl"],
 	[135.0, 0.6, "cube"], [150.0, -0.6, "cyl"],
 	[185.0, 0.2, "cube"], [200.0, -0.5, "cube"],
 	[230.0, 0.5, "cyl"], [250.0, -0.2, "cube"],
 	[280.0, 0.5, "cube"], [295.0, -0.5, "cyl"],
-	[325.0, 0.0, "cube"], [345.0, 0.6, "cyl"], [345.0, -0.6, "cyl"],
+	[325.0, 0.0, "cube"], [345.0, 0.9, "cyl"], [345.0, -0.9, "cyl"],
 	[375.0, -0.3, "cube"], [390.0, 0.4, "cube"],
 ]
 
