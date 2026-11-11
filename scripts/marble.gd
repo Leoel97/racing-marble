@@ -3,10 +3,16 @@ extends RigidBody3D
 
 const Look := preload("res://scripts/marble_look.gd")
 
-const TARGET_SPEED := 15.0
+# Modello di guida: la biglia accelera con la pendenza, frena con l'aria
+# e perde velocita' ogni volta che si sterza.
+const SLOPE_GAIN := 45.0     # spinta lungo la pista per unita' di pendenza
+const DRAG := 0.0109         # resistenza che cresce con il quadrato della velocita'
+const SCRUB := 0.15          # velocita' persa sterzando
+const MIN_SPEED := 4.0       # sotto questa soglia una piccola spinta evita lo stallo
 const LATERAL_SPEED := 9.0
 
 var track: Node3D
+var body_color: Color = Color(0.90, 0.22, 0.27)
 var track_idx: int = 0
 var progress: float = 0.0
 var controls_enabled: bool = false
@@ -38,7 +44,7 @@ func _ready() -> void:
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
 	add_child(cs)
-	add_child(Look.make_mesh(Color(0.90, 0.22, 0.27), Color(1.0, 1.0, 1.0)))
+	add_child(Look.make_mesh(body_color, Color(1.0, 1.0, 1.0)))
 
 
 func get_steer() -> float:
@@ -100,8 +106,13 @@ func _physics_process(_delta: float) -> void:
 	var right: Vector3 = track.rights[track_idx]
 	var vf: float = linear_velocity.dot(fwd)
 	var vr: float = linear_velocity.dot(right)
-	apply_central_force(fwd * clampf((TARGET_SPEED - vf) * 6.0, -10.0, 30.0))
-	apply_central_force(right * (get_steer() * LATERAL_SPEED - vr) * 10.0)
+	var steer: float = get_steer()
+	var slope: float = -fwd.y
+	var acc: float = SLOPE_GAIN * slope - DRAG * vf * absf(vf) - SCRUB * absf(steer) * maxf(vf, 0.0)
+	if vf < MIN_SPEED:
+		acc = maxf(acc, (MIN_SPEED - vf) * 3.0)
+	apply_central_force(fwd * acc * mass)
+	apply_central_force(right * (steer * LATERAL_SPEED - vr) * 10.0 * mass)
 
 
 func place_at(pos: Vector3, idx: int) -> void:

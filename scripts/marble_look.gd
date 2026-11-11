@@ -8,13 +8,17 @@ const SHADER_CODE := """
 shader_type spatial;
 uniform vec3 color_a : source_color = vec3(0.9, 0.2, 0.2);
 uniform vec3 color_b : source_color = vec3(1.0, 1.0, 1.0);
-uniform float stripes = 4.0;
 void fragment() {
-	float s = step(0.5, fract(UV.x * stripes));
-	ALBEDO = mix(color_a, color_b, s);
-	ROUGHNESS = 0.18;
-	METALLIC = 0.05;
-	SPECULAR = 0.7;
+	// Venature a spirale, come dentro una biglia di vetro.
+	float swirl = sin(UV.x * 18.85 + sin(UV.y * 3.1416) * 2.5 + UV.y * 4.0);
+	float band = smoothstep(-0.2, 0.2, swirl);
+	vec3 base = mix(color_a, color_b, band * 0.85);
+	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+	ALBEDO = base;
+	EMISSION = base * 0.10 + vec3(rim) * 0.22;
+	ROUGHNESS = 0.08;
+	METALLIC = 0.0;
+	SPECULAR = 0.9;
 }
 """
 
@@ -28,8 +32,8 @@ static func make_mesh(color_a: Color, color_b: Color) -> MeshInstance3D:
 	var sphere := SphereMesh.new()
 	sphere.radius = RADIUS
 	sphere.height = RADIUS * 2.0
-	sphere.radial_segments = 20
-	sphere.rings = 10
+	sphere.radial_segments = 28
+	sphere.rings = 14
 	var mat := ShaderMaterial.new()
 	mat.shader = _shader
 	mat.set_shader_parameter("color_a", color_a)

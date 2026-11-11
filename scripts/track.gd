@@ -7,21 +7,21 @@ const THICK := 0.5       # spessore della pista
 
 # Punti di controllo: [posizione, larghezza]. Si scende lungo -Z.
 const CONTROL := [
-	[Vector3(0, 30, 0), 8.0],
-	[Vector3(0, 29, -25), 8.0],
-	[Vector3(6, 27, -55), 7.0],
-	[Vector3(10, 25, -85), 6.0],
-	[Vector3(2, 23, -115), 6.0],
-	[Vector3(-8, 21, -145), 7.0],
-	[Vector3(-10, 19, -175), 5.5],
-	[Vector3(-2, 17, -205), 5.5],
+	[Vector3(0, 36, 0), 8.0],
+	[Vector3(0, 35, -25), 8.0],
+	[Vector3(6, 32, -55), 7.0],
+	[Vector3(10, 27, -85), 6.0],
+	[Vector3(2, 25, -115), 6.0],
+	[Vector3(-8, 24, -145), 7.0],
+	[Vector3(-10, 20, -175), 5.5],
+	[Vector3(-2, 16, -205), 5.5],
 	[Vector3(6, 15, -235), 6.0],
-	[Vector3(4, 13, -265), 5.0],
-	[Vector3(-4, 11, -295), 5.5],
-	[Vector3(-6, 9, -325), 6.0],
-	[Vector3(0, 7, -355), 7.0],
+	[Vector3(4, 14, -265), 5.0],
+	[Vector3(-4, 10.5, -295), 5.5],
+	[Vector3(-6, 8, -325), 6.0],
+	[Vector3(0, 6.5, -355), 7.0],
 	[Vector3(0, 5, -385), 8.0],
-	[Vector3(0, 4, -415), 8.0],
+	[Vector3(0, 4.3, -415), 8.0],
 	[Vector3(0, 4, -445), 8.0],
 ]
 
@@ -53,6 +53,7 @@ var total: float = 0.0
 var start_s: float = 5.0
 var finish_s: float = 0.0
 var checkpoints: Array[float] = []
+var obstacle_list := PackedVector2Array()   # (distanza, spostamento laterale in metri)
 
 
 func _ready() -> void:
@@ -253,6 +254,7 @@ func _build_obstacles() -> void:
 		var i: int = index_at(s)
 		var half: float = widths[i] * 0.5 - 0.9
 		var base: Vector3 = pos_at(s) + rights[i] * lat * half
+		obstacle_list.append(Vector2(s, lat * half))
 		var col: Color = PALETTE[(k + 2) % PALETTE.size()]
 		if kind == "cube":
 			_add_box(self, Vector3(1.3, 1.3, 1.3), base + Vector3.UP * 0.65, col, true, _yaw_of(i))
@@ -286,7 +288,8 @@ func _build_room() -> void:
 	_add_box(self, Vector3(2, 120, 620), Vector3(-130, 60, -220), Color(0.95, 0.88, 0.76), false)
 	_add_box(self, Vector3(2, 120, 620), Vector3(130, 60, -220), Color(0.95, 0.88, 0.76), false)
 	# Scrivania da cui parte la pista e un letto sullo sfondo.
-	_add_box(self, Vector3(60, 28.5, 40), Vector3(0, 14.25, 22), Color(0.60, 0.42, 0.28), false)
+	var desk_h: float = pts[0].y - THICK
+	_add_box(self, Vector3(60, desk_h, 40), Vector3(0, desk_h * 0.5, 20.5), Color(0.60, 0.42, 0.28), false)
 	_add_box(self, Vector3(70, 10, 120), Vector3(-85, 5, -150), Color(0.85, 0.35, 0.45), false)
 	_add_box(self, Vector3(70, 4, 30), Vector3(-85, 12, -105), Color(1.0, 1.0, 1.0), false)
 	# Torri di mattoncini che reggono la pista.

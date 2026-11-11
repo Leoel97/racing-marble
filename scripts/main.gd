@@ -1,12 +1,15 @@
 extends Node3D
-## Racing Marble - passo 1: una pista, la biglia a inclinazione, 3 avversari.
+## Racing Marble: flusso di gioco (menu, conto alla rovescia, gara, classifica) e camera.
 
 const TrackScript := preload("res://scripts/track.gd")
 const MarbleScript := preload("res://scripts/marble.gd")
 const AiScript := preload("res://scripts/ai_marble.gd")
+const UiScript := preload("res://scripts/ui.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const FALL_DEPTH := 5.0
+const DEFAULT_SENSITIVITY := 2.5
+const PLAYER_COLOR := Color(0.90, 0.22, 0.27)
 
 enum State { MENU, COUNTDOWN, RACE, RESULTS }
 
@@ -15,41 +18,50 @@ var track: Node3D
 var player: RigidBody3D
 var bots: Array[Node3D] = []
 var camera: Camera3D
+var ui: CanvasLayer
 var cam_fwd: Vector3 = Vector3.FORWARD
+var menu_angle: float = 0.6
 
 var race_time: float = 0.0
 var countdown: float = 0.0
+var countdown_shown: int = 0
 var last_checkpoint: float = 0.0
 var player_finish_time: float = -1.0
 var results_delay: float = 0.0
-var flash_time: float = 0.0
-var smoke_test: bool = false
-var smoke_frames: int = 0
 
 var invert_steer: bool = false
-var sensitivity: float = 2.5
+var sensitivity: float = DEFAULT_SENSITIVITY
 
-# interfaccia
-var hud_pos: Label
-var hud_time: Label
-var center_label: Label
-var menu_box: Control
-var results_box: Control
-var results_list: Label
+# modalita' di servizio usate dalla build automatica
+var smoke_test: bool = false
+var smoke_frames: int = 0
+var shots_dir: String = ""
 
 
 func _ready() -> void:
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	smoke_test = OS.get_cmdline_user_args().has("--autostart")
+	if OS.has_feature("android"):
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	for arg: String in OS.get_cmdline_user_args():
+		if arg == "--autostart":
+			smoke_test = true
+		elif arg.begins_with("--shots="):
+			shots_dir = arg.trim_prefix("--shots=")
 	_load_settings()
 	_build_world()
-	_build_ui()
-	_reset_race()
+	ui = UiScript.new()
+	add_child(ui)
+	ui.setup_settings(sensitivity, invert_steer)
+	ui.play_pressed.connect(_start_race)
+	ui.menu_pressed.connect(_show_menu)
+	ui.settings_changed.connect(_on_settings_changed)
 	_show_menu()
 	if smoke_test:
 		_start_race()
 		countdown = 0.1
 		player.auto_steer = true
+	elif shots_dir != "":
+		_run_shots()
 
 
 # ------------------------------------------------------------------ mondo
@@ -69,7 +81,9 @@ func _build_world() -> void:
 	sun.rotation_degrees = Vector3(-55.0, -35.0, 0.0)
 	sun.light_energy = 1.1
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 90.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+	sun.directional_shadow_max_distance = 70.0
+	sun.shadow_blur = 1.5
 	add_child(sun)
 
 	track = TrackScript.new()
@@ -79,23 +93,25 @@ func _build_world() -> void:
 	player = MarbleScript.new()
 	player.name = "Player"
 	player.track = track
+	player.body_color = PLAYER_COLOR
 	player.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 	player.freeze = true
 	add_child(player)
 
+	# [nome, colore, abilita', corsia]
 	var bot_defs := [
-		["Bot Blu", Color(0.27, 0.48, 0.80), 13.0, -0.8],
-		["Bot Verde", Color(0.16, 0.62, 0.56), 13.8, 0.8],
-		["Bot Giallo", Color(1.00, 0.82, 0.25), 14.5, 2.4],
+		["Bot Blu", Color(0.27, 0.48, 0.80), 0.93, -0.8],
+		["Bot Verde", Color(0.16, 0.62, 0.56), 0.98, 0.8],
+		["Bot Giallo", Color(1.00, 0.82, 0.25), 1.03, 2.4],
 	]
 	for def: Array in bot_defs:
 		var bot: Node3D = AiScript.new()
 		add_child(bot)
 		var bot_name: String = def[0]
 		var bot_color: Color = def[1]
-		var bot_speed: float = def[2]
+		var bot_skill: float = def[2]
 		var bot_lane: float = def[3]
-		bot.setup(track, bot_name, bot_color, bot_speed, bot_lane)
+		bot.setup(track, bot_name, bot_color, bot_skill, bot_lane)
 		bots.append(bot)
 
 	camera = Camera3D.new()
@@ -105,128 +121,13 @@ func _build_world() -> void:
 	camera.make_current()
 
 
-# ------------------------------------------------------------ interfaccia
+# ---------------------------------------------------------- impostazioni
 
-func _make_label(text: String, font_size: int) -> Label:
-	var l := Label.new()
-	l.text = text
-	l.add_theme_font_size_override("font_size", font_size)
-	l.add_theme_color_override("font_color", Color.WHITE)
-	l.add_theme_color_override("font_outline_color", Color(0.1, 0.1, 0.15))
-	l.add_theme_constant_override("outline_size", 10)
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return l
-
-
-func _make_button(text: String) -> Button:
-	var b := Button.new()
-	b.text = text
-	b.custom_minimum_size = Vector2(360, 96)
-	b.add_theme_font_size_override("font_size", 38)
-	return b
-
-
-func _make_panel(parent: Control) -> VBoxContainer:
-	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	parent.add_child(center)
-	var panel := PanelContainer.new()
-	center.add_child(panel)
-	var margin := MarginContainer.new()
-	for side: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 36)
-	panel.add_child(margin)
-	var box := VBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 18)
-	margin.add_child(box)
-	box.set_meta("root", center)
-	return box
-
-
-func _build_ui() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	layer.add_child(root)
-
-	hud_pos = _make_label("1/4", 56)
-	root.add_child(hud_pos)
-	hud_pos.position = Vector2(48, 24)
-
-	hud_time = _make_label("0.0", 44)
-	hud_time.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	root.add_child(hud_time)
-	hud_time.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	hud_time.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	hud_time.offset_right = -48.0
-	hud_time.offset_left = -348.0
-	hud_time.offset_top = 28.0
-
-	center_label = _make_label("", 120)
-	center_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	center_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	root.add_child(center_label)
-	center_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-
-	# --- menu
-	var mbox := _make_panel(root)
-	menu_box = mbox.get_meta("root")
-	var title := _make_label("Racing Marble", 72)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mbox.add_child(title)
-	var hint := _make_label("Inclina il telefono a destra e sinistra per sterzare", 26)
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mbox.add_child(hint)
-	var play := _make_button("GIOCA")
-	play.pressed.connect(_start_race)
-	mbox.add_child(play)
-
-	var sens_label := _make_label("Sensibilita' sterzo", 26)
-	mbox.add_child(sens_label)
-	var slider := HSlider.new()
-	slider.min_value = 1.0
-	slider.max_value = 5.0
-	slider.step = 0.1
-	slider.value = sensitivity
-	slider.custom_minimum_size = Vector2(360, 48)
-	slider.value_changed.connect(_on_sensitivity_changed)
-	mbox.add_child(slider)
-
-	var inv := CheckButton.new()
-	inv.text = "Inverti sterzo"
-	inv.add_theme_font_size_override("font_size", 28)
-	inv.button_pressed = invert_steer
-	inv.toggled.connect(_on_invert_toggled)
-	mbox.add_child(inv)
-
-	# --- risultati
-	var rbox := _make_panel(root)
-	results_box = rbox.get_meta("root")
-	var rtitle := _make_label("Classifica", 60)
-	rtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	rbox.add_child(rtitle)
-	results_list = _make_label("", 36)
-	rbox.add_child(results_list)
-	var again := _make_button("RIGIOCA")
-	again.pressed.connect(_start_race)
-	rbox.add_child(again)
-	var back := _make_button("MENU")
-	back.pressed.connect(_show_menu)
-	rbox.add_child(back)
-
-
-func _on_sensitivity_changed(value: float) -> void:
-	sensitivity = value
-	player.sensitivity = value
-	_save_settings()
-
-
-func _on_invert_toggled(pressed: bool) -> void:
-	invert_steer = pressed
-	player.invert = pressed
+func _on_settings_changed(new_sensitivity: float, new_invert: bool) -> void:
+	sensitivity = new_sensitivity
+	invert_steer = new_invert
+	player.sensitivity = sensitivity
+	player.invert = invert_steer
 	_save_settings()
 
 
@@ -234,7 +135,7 @@ func _load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) == OK:
 		invert_steer = bool(cfg.get_value("controls", "invert", false))
-		sensitivity = float(cfg.get_value("controls", "sensitivity", 2.5))
+		sensitivity = float(cfg.get_value("controls", "sensitivity", DEFAULT_SENSITIVITY))
 
 
 func _save_settings() -> void:
@@ -266,49 +167,42 @@ func _reset_race() -> void:
 func _show_menu() -> void:
 	state = State.MENU
 	_reset_race()
-	menu_box.visible = true
-	results_box.visible = false
-	hud_pos.visible = false
-	hud_time.visible = false
-	center_label.text = ""
+	ui.show_menu()
 
 
 func _start_race() -> void:
 	_reset_race()
 	state = State.COUNTDOWN
 	countdown = 3.0
-	menu_box.visible = false
-	results_box.visible = false
-	hud_pos.visible = true
-	hud_time.visible = true
+	countdown_shown = 0
+	ui.show_race()
+	_refresh_hud()
 
 
 func _go() -> void:
 	state = State.RACE
 	player.freeze = false
 	player.controls_enabled = true
-	center_label.text = "VIA!"
-	flash_time = 0.8
+	ui.pop("VIA!", ui.YELLOW, 190, 0.5)
 
 
 func _process(delta: float) -> void:
 	match state:
 		State.COUNTDOWN:
 			countdown -= delta
-			center_label.text = str(int(ceil(maxf(countdown, 0.01))))
+			var n: int = int(ceil(maxf(countdown, 0.01)))
+			if n != countdown_shown:
+				countdown_shown = n
+				ui.pop(str(n))
 			if countdown <= 0.0:
 				_go()
 		State.RACE:
 			_tick_race(delta)
-	if flash_time > 0.0:
-		flash_time -= delta
-		if flash_time <= 0.0 and state == State.RACE:
-			center_label.text = ""
 	_update_camera(delta, false)
 	if smoke_test:
 		smoke_frames += 1
 		if smoke_frames % 120 == 0:
-			print("SMOKE t=%.1f state=%d progress=%.1f y=%.1f pos=%d" % [race_time, state, player.progress, player.global_position.y, _player_position()])
+			print("SMOKE t=%.1f state=%d progress=%.1f y=%.1f speed=%.1f pos=%d" % [race_time, state, player.progress, player.global_position.y, player.linear_velocity.length(), _player_position()])
 
 
 func _tick_race(delta: float) -> void:
@@ -317,40 +211,44 @@ func _tick_race(delta: float) -> void:
 		bot.tick(delta, race_time)
 
 	if player_finish_time < 0.0:
-		# checkpoint
 		for cp: float in track.checkpoints:
 			if player.progress >= cp and cp > last_checkpoint:
 				last_checkpoint = cp
-				center_label.text = "Checkpoint!"
-				flash_time = 0.8
-		# caduta fuori pista
+				ui.pop("CHECKPOINT!", Color.WHITE, 90, 0.5)
 		var ref_y: float = track.pts[player.track_idx].y
 		if player.global_position.y < ref_y - FALL_DEPTH:
 			player.place_at(track.spawn_point(last_checkpoint, 0.0), track.index_at(last_checkpoint))
-		# traguardo
 		if player.progress >= track.finish_s:
 			player_finish_time = race_time
 			player.controls_enabled = false
 			player.linear_damp = 3.0
-			center_label.text = "TRAGUARDO!"
-			flash_time = 0.0
+			ui.pop("TRAGUARDO!", ui.YELLOW, 130)
 			results_delay = 2.0
 	else:
 		results_delay -= delta
 		if results_delay <= 0.0:
 			_show_results()
+			return
+	_refresh_hud()
 
-	hud_pos.text = "%d/4" % _player_position()
+
+func _refresh_hud() -> void:
+	var span: float = maxf(track.finish_s - track.start_s, 1.0)
+	var fractions: Array = [(player.progress - track.start_s) / span]
+	var colors: Array = [PLAYER_COLOR]
+	for bot in bots:
+		fractions.append((bot.s - track.start_s) / span)
+		colors.append(bot.color)
 	var shown: float = race_time if player_finish_time < 0.0 else player_finish_time
-	hud_time.text = _format_time(shown)
+	ui.update_hud(_player_position(), _format_time(shown), fractions, colors)
 
 
 func _standings() -> Array:
 	## Ordina i 4 concorrenti: prima chi ha finito (per tempo), poi per avanzamento.
 	var rows: Array = []
-	rows.append({"name": "Tu", "time": player_finish_time, "progress": player.progress})
+	rows.append({"name": "Tu", "time": player_finish_time, "progress": player.progress, "color": PLAYER_COLOR, "is_player": true})
 	for bot in bots:
-		rows.append({"name": bot.display_name, "time": bot.finish_time, "progress": bot.s})
+		rows.append({"name": bot.display_name, "time": bot.finish_time, "progress": bot.s, "color": bot.color, "is_player": false})
 	rows.sort_custom(_compare_rows)
 	return rows
 
@@ -373,7 +271,8 @@ func _player_position() -> int:
 	var rows: Array = _standings()
 	for i in range(rows.size()):
 		var row: Dictionary = rows[i]
-		if row["name"] == "Tu":
+		var is_player: bool = row["is_player"]
+		if is_player:
 			return i + 1
 	return 1
 
@@ -386,24 +285,30 @@ func _format_time(t: float) -> String:
 
 func _show_results() -> void:
 	state = State.RESULTS
-	center_label.text = ""
-	var text: String = ""
+	ui.clear_center()
 	var rows: Array = _standings()
+	var log_text: String = ""
 	for i in range(rows.size()):
 		var row: Dictionary = rows[i]
 		var t: float = row["time"]
-		var time_text: String = _format_time(t) if t >= 0.0 else "in gara"
-		text += "%d.  %s   %s\n" % [i + 1, row["name"], time_text]
-	results_list.text = text.strip_edges()
+		row["time_text"] = _format_time(t) if t >= 0.0 else "in gara"
+		log_text += "%d. %s %s\n" % [i + 1, row["name"], row["time_text"]]
+	ui.show_results(rows, _player_position())
 	if smoke_test:
-		print("SMOKE RESULTS\n" + results_list.text)
-	results_box.visible = true
+		print("SMOKE RESULTS\n" + log_text)
 
 
 # ---------------------------------------------------------------- camera
 
 func _update_camera(delta: float, snap: bool) -> void:
 	var target: Vector3 = player.get_global_transform_interpolated().origin
+	if state == State.MENU:
+		# Nel menu la camera gira lentamente attorno alla biglia sulla griglia di partenza.
+		menu_angle += delta * 0.25
+		var grid_center: Vector3 = target + track.rights[player.track_idx] * 2.4
+		camera.global_position = grid_center + Vector3(sin(menu_angle) * 7.5, 2.6, cos(menu_angle) * 7.5)
+		camera.look_at(grid_center + Vector3.UP * 0.4, Vector3.UP)
+		return
 	var fwd: Vector3 = track.dirs[player.track_idx]
 	if snap:
 		cam_fwd = fwd
@@ -415,3 +320,44 @@ func _update_camera(delta: float, snap: bool) -> void:
 	else:
 		camera.global_position = camera.global_position.lerp(want, 1.0 - exp(-9.0 * delta))
 	camera.look_at(target + cam_fwd * 5.0, Vector3.UP)
+
+
+# ------------------------------------------- schermate per la revisione
+
+func _wait(seconds: float) -> void:
+	await get_tree().create_timer(seconds).timeout
+
+
+func _shot(shot_name: String) -> void:
+	await RenderingServer.frame_post_draw
+	var img: Image = get_viewport().get_texture().get_image()
+	img.save_png(shots_dir.path_join(shot_name + ".png"))
+	print("SHOT ", shot_name)
+
+
+func _run_shots() -> void:
+	## Gioca una gara da solo e salva un'immagine di ogni schermata.
+	DirAccess.make_dir_recursive_absolute(shots_dir)
+	await _wait(1.0)
+	await _shot("1_menu")
+	ui.open_settings()
+	await _wait(0.3)
+	await _shot("2_impostazioni")
+	ui.close_settings()
+	_start_race()
+	player.auto_steer = true
+	await _wait(1.3)
+	await _shot("3_conto_alla_rovescia")
+	await _wait(6.0)
+	await _shot("4_gara_a")
+	await _wait(8.0)
+	await _shot("5_gara_b")
+	await _wait(8.0)
+	await _shot("6_gara_c")
+	var guard: float = 0.0
+	while state != State.RESULTS and guard < 90.0:
+		await _wait(0.5)
+		guard += 0.5
+	await _wait(0.5)
+	await _shot("7_classifica")
+	get_tree().quit()
