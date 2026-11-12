@@ -73,10 +73,20 @@ func setup(ui_ref: CanvasLayer) -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	column.add_child(scroll)
+	# un po' di spazio attorno alla lista: gli elementi arrotondati (e le loro ombre)
+	# non toccano i bordi dritti dell'area che scorre
+	var pad := MarginContainer.new()
+	pad.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pad.mouse_filter = Control.MOUSE_FILTER_PASS
+	pad.add_theme_constant_override("margin_left", 14)
+	pad.add_theme_constant_override("margin_right", 14)
+	pad.add_theme_constant_override("margin_top", 8)
+	pad.add_theme_constant_override("margin_bottom", 16)
+	scroll.add_child(pad)
 	content = VBoxContainer.new()
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 12)
-	scroll.add_child(content)
+	pad.add_child(content)
 
 	info_label = ui._label("", 24, ui.INK, 0, false)
 	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
