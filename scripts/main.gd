@@ -94,6 +94,8 @@ func _ready() -> void:
 	customize_ui.finish_previewed.connect(func(id: String) -> void: FinishFx.play(id, self, player))
 	customize_ui.saved.connect(_on_customize_saved)
 	ui.customize_pressed.connect(_open_customize)
+	# la tastiera deve stare sopra a tutte le schermate, altrimenti non riceve i tocchi
+	ui.keyboard.move_to_front()
 
 	_show_menu()
 	if smoke_test:

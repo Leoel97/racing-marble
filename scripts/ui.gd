@@ -229,8 +229,8 @@ func _apply_safe_area() -> void:
 		top = maxf(area.position.y, 0.0) * k
 		right = maxf(win.x - area.end.x, 0.0) * k
 		bottom = maxf(win.y - area.end.y, 0.0) * k
-	safe.offset_left = clampf(left, 36.0, 140.0)
-	safe.offset_right = -clampf(right, 36.0, 140.0)
+	safe.offset_left = clampf(left, 44.0, 140.0)
+	safe.offset_right = -clampf(right, 44.0, 140.0)
 	safe.offset_top = clampf(top, 22.0, 90.0)
 	safe.offset_bottom = -clampf(bottom, 24.0, 90.0)
 
@@ -313,13 +313,13 @@ func _build_menu() -> void:
 	pulse.tween_property(play_btn, "scale", Vector2(1.05, 1.05), 0.7).set_trans(Tween.TRANS_SINE)
 	pulse.tween_property(play_btn, "scale", Vector2(1.0, 1.0), 0.7).set_trans(Tween.TRANS_SINE)
 
-	var gear := _button("IMPOSTAZIONI", 26, Color.WHITE, WHITE_DARK, Vector2(0, 70))
+	var gear := _button("IMPOSTAZIONI", 26, Color.WHITE, WHITE_DARK, Vector2(290, 70))
 	menu.add_child(gear)
 	gear.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 0)
 	gear.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	gear.pressed.connect(open_settings)
 
-	var marble_btn := _button("LA MIA BIGLIA", 28, Color.WHITE, WHITE_DARK, Vector2(0, 84))
+	var marble_btn := _button("LA MIA BIGLIA", 28, Color.WHITE, WHITE_DARK, Vector2(330, 84))
 	menu.add_child(marble_btn)
 	marble_btn.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 0)
 	marble_btn.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -490,6 +490,7 @@ func _build_wins() -> void:
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 330)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.scroll_deadzone = 12
 	box.add_child(scroll)
 	wins_rows = VBoxContainer.new()
 	wins_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -526,8 +527,10 @@ func open_wins() -> void:
 			next_text = "Prossimo sblocco: %s (%s), tra %d %s." % [item_name, group_name.to_lower(), missing, "vittoria" if missing == 1 else "vittorie"]
 		var panel := PanelContainer.new()
 		panel.add_theme_stylebox_override("panel", _margins(_box(Color(0.86, 0.95, 0.90) if unlocked else ROW, 18), 20.0, 4.0, 6.0))
+		panel.mouse_filter = Control.MOUSE_FILTER_PASS    # lascia passare il trascinamento allo scorrimento
 		wins_rows.add_child(panel)
 		var line := HBoxContainer.new()
+		line.mouse_filter = Control.MOUSE_FILTER_PASS
 		line.add_theme_constant_override("separation", 14)
 		panel.add_child(line)
 		var need_label := _label(str(need), 30, INK)

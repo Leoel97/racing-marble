@@ -21,6 +21,8 @@ var wins_label: Label
 var info_label: Label
 var tab_buttons: Dictionary = {}
 var content: VBoxContainer
+var scroll: ScrollContainer
+var _press_scroll: int = 0
 
 
 func setup(ui_ref: CanvasLayer) -> void:
@@ -66,7 +68,8 @@ func setup(ui_ref: CanvasLayer) -> void:
 		tabs.add_child(b)
 		tab_buttons[key] = b
 
-	var scroll := ScrollContainer.new()
+	scroll = ScrollContainer.new()
+	scroll.scroll_deadzone = 12
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	column.add_child(scroll)
@@ -113,6 +116,7 @@ func _open_tab(key: String) -> void:
 	info_label.text = ""
 	previewed.emit(config)
 	_rebuild()
+	scroll.set_deferred("scroll_vertical", 0)
 
 
 func _clear() -> void:
@@ -122,7 +126,14 @@ func _clear() -> void:
 
 
 func _rebuild() -> void:
+	## Ricostruisce la lista senza perdere il punto in cui si era arrivati scorrendo.
+	var keep: int = scroll.scroll_vertical
 	_clear()
+	_fill()
+	scroll.set_deferred("scroll_vertical", keep)
+
+
+func _fill() -> void:
 	if tab == "colors":
 		_color_row("Colore principale", "color_a")
 		_color_row("Colore secondario", "color_b")
@@ -155,8 +166,24 @@ func _item_card(item: Dictionary) -> Button:
 		b.add_theme_font_size_override("font_size", 24)
 		for key: String in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 			b.add_theme_color_override(key, ui.INK.lightened(0.25))
-	b.pressed.connect(_pick.bind(id))
+	_scroll_friendly(b)
+	b.pressed.connect(_pick_if_tap.bind(id))
 	return b
+
+
+func _scroll_friendly(b: Button) -> void:
+	## Lascia passare il trascinamento alla lista, cosi' si scorre anche partendo da un bottone.
+	b.mouse_filter = Control.MOUSE_FILTER_PASS
+	b.button_down.connect(func() -> void: _press_scroll = scroll.scroll_vertical)
+
+
+func _was_tap() -> bool:
+	return absi(scroll.scroll_vertical - _press_scroll) < 10
+
+
+func _pick_if_tap(id: String) -> void:
+	if _was_tap():
+		_pick(id)
 
 
 func _pick(id: String) -> void:
@@ -195,8 +222,14 @@ func _color_row(title: String, key: String) -> void:
 		var sb: StyleBoxFlat = ui._box(ui.YELLOW if selected else Color(1, 1, 1, 0), 22)
 		for state: String in ["normal", "hover", "pressed", "focus", "hover_pressed"]:
 			b.add_theme_stylebox_override(state, sb)
-		b.pressed.connect(_pick_color.bind(key, hex))
+		_scroll_friendly(b)
+		b.pressed.connect(_pick_color_if_tap.bind(key, hex))
 		flow.add_child(b)
+
+
+func _pick_color_if_tap(key: String, hex: String) -> void:
+	if _was_tap():
+		_pick_color(key, hex)
 
 
 func _pick_color(key: String, hex: String) -> void:
