@@ -5,6 +5,7 @@ const TrackScript := preload("res://scripts/track.gd")
 const MarbleScript := preload("res://scripts/marble.gd")
 const AiScript := preload("res://scripts/ai_marble.gd")
 const UiScript := preload("res://scripts/ui.gd")
+const RoomScript := preload("res://scripts/room.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const FALL_DEPTH := 5.0
@@ -78,7 +79,7 @@ func _build_world() -> void:
 	add_child(we)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-55.0, -35.0, 0.0)
+	sun.rotation_degrees = Vector3(-52.0, -55.0, 0.0)   # la luce entra dalla finestra di sinistra
 	sun.light_energy = 1.1
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
@@ -89,6 +90,11 @@ func _build_world() -> void:
 	track = TrackScript.new()
 	track.name = "Track"
 	add_child(track)
+
+	var room: Node3D = RoomScript.new()
+	room.name = "Room"
+	add_child(room)
+	room.build(track)
 
 	player = MarbleScript.new()
 	player.name = "Player"

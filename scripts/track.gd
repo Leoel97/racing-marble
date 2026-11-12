@@ -63,7 +63,6 @@ func _ready() -> void:
 	_build_track_mesh()
 	_build_obstacles()
 	_build_gates()
-	_build_room()
 
 
 # ---------------------------------------------------------------- campioni
@@ -287,27 +286,3 @@ func _build_gates() -> void:
 	for n in range(1, checkpoints.size()):
 		_add_gate(checkpoints[n], Color(1.00, 0.82, 0.25))
 	_add_gate(finish_s, Color(0.90, 0.22, 0.27))
-
-
-func _build_room() -> void:
-	# Pavimento di legno, tappeto e pareti della cameretta (solo scenografia).
-	_add_box(self, Vector3(260, 1, 620), Vector3(0, -0.5, -220), Color(0.72, 0.53, 0.34), false)
-	_add_box(self, Vector3(90, 0.2, 160), Vector3(20, 0.1, -330), Color(0.55, 0.75, 0.90), false)
-	_add_box(self, Vector3(260, 120, 2), Vector3(0, 60, -530), Color(0.98, 0.92, 0.80), false)
-	_add_box(self, Vector3(2, 120, 620), Vector3(-130, 60, -220), Color(0.95, 0.88, 0.76), false)
-	_add_box(self, Vector3(2, 120, 620), Vector3(130, 60, -220), Color(0.95, 0.88, 0.76), false)
-	# Scrivania da cui parte la pista e un letto sullo sfondo.
-	var desk_h: float = pts[0].y - THICK
-	_add_box(self, Vector3(60, desk_h, 40), Vector3(0, desk_h * 0.5, 20.5), Color(0.60, 0.42, 0.28), false)
-	_add_box(self, Vector3(70, 10, 120), Vector3(-85, 5, -150), Color(0.85, 0.35, 0.45), false)
-	_add_box(self, Vector3(70, 4, 30), Vector3(-85, 12, -105), Color(1.0, 1.0, 1.0), false)
-	# Torri di mattoncini che reggono la pista.
-	var k: int = 0
-	var s: float = 30.0
-	while s < total - 5.0:
-		var c: Vector3 = pos_at(s)
-		var h: float = c.y - THICK
-		if h > 1.0:
-			_add_box(self, Vector3(2.2, h, 2.2), Vector3(c.x, h * 0.5, c.z), PALETTE[k % PALETTE.size()], false)
-		k += 1
-		s += 28.0
