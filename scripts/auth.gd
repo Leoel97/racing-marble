@@ -247,11 +247,22 @@ func fetch_wins() -> Dictionary:
 	return {"ok": true, "wins": int(row.get("wins", 0))}
 
 
-func add_wins(amount: int) -> Dictionary:
-	## Aggiunge vittorie al profilo e restituisce il nuovo totale.
+func start_race() -> String:
+	## Chiede al server di aprire una gara e restituisce il suo codice ("" se non riesce).
 	if not await _ensure_token():
+		return ""
+	var res: Dictionary = await _post("/rest/v1/rpc/start_race", {}, access_token)
+	if not _succeeded(res):
+		return ""
+	return str(res["text"]).strip_edges().trim_prefix("\"").trim_suffix("\"")
+
+
+func finish_race(race_id: String, won: bool) -> Dictionary:
+	## Chiude la gara sul server. E' il server a decidere se la vittoria vale
+	## e a restituire il totale aggiornato.
+	if race_id == "" or not await _ensure_token():
 		return {"ok": false}
-	var res: Dictionary = await _post("/rest/v1/rpc/add_wins", {"amount": amount}, access_token)
+	var res: Dictionary = await _post("/rest/v1/rpc/finish_race", {"race": race_id, "won": won}, access_token)
 	if not _succeeded(res):
 		return {"ok": false}
 	var text: String = str(res["text"]).strip_edges()

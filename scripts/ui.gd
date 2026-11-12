@@ -10,6 +10,7 @@ signal customize_pressed
 
 const ProgressBarScript := preload("res://scripts/progress_bar.gd")
 const Catalog := preload("res://scripts/catalog.gd")
+const KeyboardScript := preload("res://scripts/keyboard.gd")
 
 const INK := Color(0.114, 0.169, 0.325)
 const YELLOW := Color(1.0, 0.824, 0.247)
@@ -46,6 +47,7 @@ var wins_number: Label
 var wins_next: Label
 var wins_rows: VBoxContainer
 var _wins: int = 0
+var keyboard: Control
 
 var _invert: bool = false
 var _center_tween: Tween
@@ -75,6 +77,9 @@ func _ready() -> void:
 	_build_results()
 	_build_settings()
 	_build_wins()
+	keyboard = KeyboardScript.new()
+	base.add_child(keyboard)
+	keyboard.setup(self)
 
 	_apply_safe_area()
 	get_viewport().size_changed.connect(_apply_safe_area)
@@ -95,9 +100,15 @@ func _input(event: InputEvent) -> void:
 	if not pressed:
 		return
 	var focus: Control = get_viewport().gui_get_focus_owner()
-	if focus is LineEdit and not focus.get_global_rect().has_point(pos):
+	if focus is LineEdit and not focus.get_global_rect().has_point(pos) and not keyboard.contains(pos):
 		focus.release_focus()
-		DisplayServer.virtual_keyboard_hide()
+
+
+func attach_keyboard(field: LineEdit, numeric: bool) -> void:
+	## Collega un campo di testo alla tastiera del gioco (quella di sistema resta chiusa).
+	field.virtual_keyboard_enabled = false
+	field.focus_entered.connect(func() -> void: keyboard.open(field, numeric))
+	field.focus_exited.connect(func() -> void: keyboard.close(field))
 
 
 # ------------------------------------------------------------- mattoncini
@@ -570,6 +581,11 @@ func _build_results() -> void:
 	again.pressed.connect(func() -> void: play_pressed.emit())
 	buttons.add_child(again)
 	results.visible = false
+
+
+func set_results_note(note: String) -> void:
+	results_note.text = note
+	results_note.visible = note != ""
 
 
 func show_results(rows: Array, player_place: int, note: String = "") -> void:

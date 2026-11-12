@@ -70,29 +70,79 @@ on conflict do nothing;
 alter table public.profiles
   add column if not exists wins integer not null default 0;
 
--- 8) L'app aggiunge le vittorie solo al profilo di chi e' collegato.
-create or replace function public.add_wins(amount integer)
+-- 8) Gare: il server segna quando una gara inizia. Una vittoria viene accettata solo
+--    se quella gara esiste, e' di chi la dichiara, non e' gia' stata chiusa ed e' durata
+--    un tempo credibile. L'app non puo' piu' "aggiungere vittorie" a piacere.
+create table if not exists public.races (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  started_at timestamptz not null default now(),
+  finished_at timestamptz,
+  won boolean
+);
+create index if not exists races_user_idx on public.races (user_id, started_at);
+alter table public.races enable row level security;   -- nessuna policy: dall'app non si legge ne' si scrive
+
+create or replace function public.start_race()
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  uid uuid := (select auth.uid());
+  race_id uuid;
+begin
+  if uid is null then
+    raise exception 'not authenticated';
+  end if;
+  delete from public.races where user_id = uid and started_at < now() - interval '1 day';
+  insert into public.races (user_id) values (uid) returning id into race_id;
+  return race_id;
+end;
+$$;
+
+create or replace function public.finish_race(race uuid, won boolean)
 returns integer
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
+  uid uuid := (select auth.uid());
+  started timestamptz;
+  elapsed interval;
+  counted boolean := coalesce(won, false);
   total integer;
 begin
-  if (select auth.uid()) is null then
+  if uid is null then
     raise exception 'not authenticated';
   end if;
-  if amount < 1 or amount > 50 then
-    raise exception 'invalid amount';
+  select r.started_at into started
+    from public.races r
+   where r.id = race and r.user_id = uid and r.finished_at is null
+   for update;
+  if started is null then
+    raise exception 'race not found';
   end if;
-  update public.profiles
-     set wins = wins + amount
-   where id = (select auth.uid())
-  returning wins into total;
+  elapsed := now() - started;
+  -- troppo breve per essere una gara vera, o lasciata aperta troppo a lungo: non vale
+  if elapsed < interval '18 seconds' or elapsed > interval '15 minutes' then
+    counted := false;
+  end if;
+  update public.races r set finished_at = now(), won = counted where r.id = race;
+  if counted then
+    update public.profiles set wins = wins + 1 where id = uid;
+  end if;
+  select p.wins into total from public.profiles p where p.id = uid;
   return coalesce(total, 0);
 end;
 $$;
 
-revoke all on function public.add_wins(integer) from public, anon;
-grant execute on function public.add_wins(integer) to authenticated;
+revoke all on function public.start_race() from public, anon;
+revoke all on function public.finish_race(uuid, boolean) from public, anon;
+grant execute on function public.start_race() to authenticated;
+grant execute on function public.finish_race(uuid, boolean) to authenticated;
+
+-- 9) La vecchia funzione che lasciava decidere all'app viene eliminata.
+drop function if exists public.add_wins(integer);

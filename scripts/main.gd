@@ -30,6 +30,8 @@ var auth_ui: Control
 var progress: Node
 var customize_ui: Control
 var results_note: String = ""
+var race_token: String = ""
+var race_serial: int = 0
 var cam_fwd: Vector3 = Vector3.FORWARD
 var menu_angle: float = 0.6
 
@@ -132,25 +134,14 @@ func _enter_menu() -> void:
 
 
 func _sync_wins() -> void:
-	## Carica sul profilo le vittorie ottenute e rilegge il totale. Senza rete (o prima
-	## che il database sia pronto) restano contate sul telefono e si riprova piu' tardi.
+	## Rilegge dal profilo le vittorie totali (le assegna solo il server).
 	if auth.user_id == "" or auth.user_id == "local":
 		return
-	if progress.pending > 0:
-		var amount: int = mini(progress.pending, 50)
-		var sent: Dictionary = await auth.add_wins(amount)
-		var sent_ok: bool = sent.get("ok", false)
-		if sent_ok:
-			progress.wins_synced = int(sent["wins"])
-			progress.pending -= amount
-			progress.save()
-	else:
-		var got: Dictionary = await auth.fetch_wins()
-		var got_ok: bool = got.get("ok", false)
-		if got_ok:
-			progress.wins_synced = int(got["wins"])
-			progress.save()
-	ui.set_wins(progress.total_wins())
+	var got: Dictionary = await auth.fetch_wins()
+	var got_ok: bool = got.get("ok", false)
+	if got_ok:
+		progress.set_wins(int(got["wins"]))
+		ui.set_wins(progress.total_wins())
 
 
 func _player_color() -> Color:
@@ -376,6 +367,8 @@ func _start_race() -> void:
 	state = State.COUNTDOWN
 	countdown = 3.0
 	countdown_shown = 0
+	race_serial += 1
+	_open_server_race()
 	ui.show_race()
 	_refresh_hud()
 
@@ -435,22 +428,57 @@ func _tick_race(delta: float) -> void:
 	_refresh_hud()
 
 
+func _open_server_race() -> void:
+	## All'inizio di ogni gara il server apre una "gara" a nome del giocatore.
+	race_token = ""
+	if auth.user_id == "" or auth.user_id == "local":
+		return
+	var serial: int = race_serial
+	var token: String = await auth.start_race()
+	if serial == race_serial:
+		race_token = token
+
+
 func _register_result() -> void:
-	## Un primo posto vale una vittoria: si conta subito e si carica sul profilo.
+	## A fine gara si comunica l'esito al server, che decide se la vittoria vale
+	## (gara aperta da lui, non gia' usata, durata credibile) e aggiorna il totale.
 	results_note = ""
-	if _player_position() != 1:
+	var won: bool = _player_position() == 1
+	var token: String = race_token
+	race_token = ""
+	if auth.user_id == "local":
+		return
+	if token == "":
+		if won:
+			results_note = "Vittoria non registrata: serve la connessione."
 		return
 	var before: int = progress.total_wins()
-	progress.add_win()
-	var after: int = progress.total_wins()
+	var result: Dictionary = await auth.finish_race(token, won)
+	var ok: bool = result.get("ok", false)
+	if not ok:
+		if won:
+			_set_results_note("Vittoria non registrata: serve la connessione.")
+		return
+	var after: int = int(result["wins"])
+	progress.set_wins(after)
 	ui.set_wins(after)
-	results_note = "Vittorie totali: %d" % after
+	if not won:
+		return
+	var note: String = "Vittorie totali: %d" % after
+	if after <= before:
+		note = "Vittoria non convalidata dal server."
 	var names: Array = []
 	for item: Dictionary in Catalog.newly_unlocked(before, after):
 		names.append(str(item["name"]))
 	if not names.is_empty():
-		results_note += "   ·   Nuovo sblocco: " + ", ".join(PackedStringArray(names)) + "!"
-	_sync_wins()
+		note += "   ·   Nuovo sblocco: " + ", ".join(PackedStringArray(names)) + "!"
+	_set_results_note(note)
+
+
+func _set_results_note(text: String) -> void:
+	results_note = text
+	if state == State.RESULTS:
+		ui.set_results_note(text)
 
 
 func _refresh_hud() -> void:
@@ -574,6 +602,13 @@ func _run_shots() -> void:
 	auth_ui.open_login()
 	await _wait(0.6)
 	await _shot("0a_accedi")
+	auth_ui.login_email.grab_focus()
+	await _wait(0.4)
+	await _shot("0a2_tastiera_lettere")
+	ui.keyboard._press("#symbols")
+	await _wait(0.3)
+	await _shot("0a3_tastiera_simboli")
+	auth_ui.login_email.release_focus()
 	auth_ui.open_register()
 	auth_ui.show_error("Esiste già un account con questa email.")
 	await _wait(0.3)
@@ -581,6 +616,10 @@ func _run_shots() -> void:
 	auth_ui.open_verify("lello@example.com")
 	await _wait(0.3)
 	await _shot("0c_codice")
+	auth_ui.verify_code.grab_focus()
+	await _wait(0.4)
+	await _shot("0c2_tastierino")
+	auth_ui.verify_code.release_focus()
 	auth_ui.open_recover()
 	await _wait(0.3)
 	await _shot("0d_password_dimenticata")

@@ -90,14 +90,18 @@ func _fit() -> void:
 func _process(_delta: float) -> void:
 	if not visible:
 		return
-	# la tastiera copre meta' schermo: accorcia l'area e lascia scorrere il contenuto
-	var win_h: float = float(DisplayServer.window_get_size().y)
-	var units: float = 0.0
-	if win_h > 0.0:
-		units = float(DisplayServer.virtual_keyboard_get_height()) * size.y / win_h
+	# quando la tastiera del gioco e' aperta, accorcia l'area e tiene visibile il campo attivo
+	var units: float = ui.keyboard.height_units()
 	if absf(units - _kb_units) > 1.0:
 		_kb_units = units
 		scroll.offset_bottom = -units
+		_reveal_focus.call_deferred()
+
+
+func _reveal_focus() -> void:
+	var focus: Control = get_viewport().gui_get_focus_owner()
+	if focus != null and scroll.is_ancestor_of(focus):
+		scroll.ensure_control_visible(focus)
 
 
 # --------------------------------------------------------------- mattoncini
@@ -120,6 +124,7 @@ func _field(placeholder: String, keyboard: int, secret: bool, max_len: int) -> L
 	focus.border_color = ui.YELLOW_DARK
 	f.add_theme_stylebox_override("normal", normal)
 	f.add_theme_stylebox_override("focus", focus)
+	ui.attach_keyboard(f, keyboard == LineEdit.KEYBOARD_TYPE_NUMBER)
 	return f
 
 
@@ -324,7 +329,9 @@ func close() -> void:
 	login_password.text = ""
 	reg_password.text = ""
 	reset_password.text = ""
-	DisplayServer.virtual_keyboard_hide()
+	var focus: Control = get_viewport().gui_get_focus_owner()
+	if focus != null and is_ancestor_of(focus):
+		focus.release_focus()
 
 
 func show_error(text: String) -> void:

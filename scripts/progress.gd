@@ -11,7 +11,8 @@ var config: Dictionary = Catalog.default_config()
 
 
 func total_wins() -> int:
-	return wins_synced + pending
+	## Le vittorie le decide il server: qui c'e' solo l'ultima copia letta dal profilo.
+	return wins_synced
 
 
 func _path() -> String:
@@ -43,8 +44,9 @@ func save() -> void:
 	cfg.save(_path())
 
 
-func add_win() -> void:
-	pending += 1
+func set_wins(total: int) -> void:
+	wins_synced = maxi(total, 0)
+	pending = 0
 	save()
 
 
