@@ -23,7 +23,7 @@ var finish_time: float = -1.0
 var _mesh: MeshInstance3D
 
 
-func setup(track_ref: Node3D, bot_name: String, bot_color: Color, bot_skill: float, lane_offset: float) -> void:
+func setup(track_ref: Node3D, bot_name: String, bot_color: Color, bot_skill: float, lane_offset: float, look: Dictionary) -> void:
 	track = track_ref
 	display_name = bot_name
 	color = bot_color
@@ -31,7 +31,7 @@ func setup(track_ref: Node3D, bot_name: String, bot_color: Color, bot_skill: flo
 	skill = bot_skill
 	lane = lane_offset
 	phase = randf() * TAU
-	_mesh = Look.make_mesh(bot_color, Color(1.0, 1.0, 1.0))
+	_mesh = Look.make_mesh(look)
 	add_child(_mesh)
 
 

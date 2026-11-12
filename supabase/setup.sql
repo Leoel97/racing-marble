@@ -61,3 +61,38 @@ select id, btrim(raw_user_meta_data ->> 'nickname')
 from auth.users
 where char_length(coalesce(btrim(raw_user_meta_data ->> 'nickname'), '')) between 3 and 16
 on conflict do nothing;
+
+-- ---------------------------------------------------------------------------
+-- Vittorie (aggiunta del passo "personalizzazione"). Rieseguibile senza danni.
+-- ---------------------------------------------------------------------------
+
+-- 7) Vittorie totali (primi posti) salvate sul profilo.
+alter table public.profiles
+  add column if not exists wins integer not null default 0;
+
+-- 8) L'app aggiunge le vittorie solo al profilo di chi e' collegato.
+create or replace function public.add_wins(amount integer)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  total integer;
+begin
+  if (select auth.uid()) is null then
+    raise exception 'not authenticated';
+  end if;
+  if amount < 1 or amount > 50 then
+    raise exception 'invalid amount';
+  end if;
+  update public.profiles
+     set wins = wins + amount
+   where id = (select auth.uid())
+  returning wins into total;
+  return coalesce(total, 0);
+end;
+$$;
+
+revoke all on function public.add_wins(integer) from public, anon;
+grant execute on function public.add_wins(integer) to authenticated;

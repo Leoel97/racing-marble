@@ -17,7 +17,8 @@ const LATERAL_SPEED := 9.0   # riferimento per gli avversari
 const ROLL_INERTIA := 1.4    # una sfera che rotola "pesa" 7/5: compensa la spinta
 
 var track: Node3D
-var body_color: Color = Color(0.90, 0.22, 0.27)
+var look: Dictionary = {}
+var mesh_node: MeshInstance3D
 var track_idx: int = 0
 var progress: float = 0.0
 var controls_enabled: bool = false
@@ -49,7 +50,14 @@ func _ready() -> void:
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
 	add_child(cs)
-	add_child(Look.make_mesh(body_color, Color(1.0, 1.0, 1.0)))
+	mesh_node = Look.make_mesh(look)
+	add_child(mesh_node)
+
+
+func apply_look(config: Dictionary) -> void:
+	look = config
+	if mesh_node != null:
+		Look.apply(mesh_node, config)
 
 
 func get_steer() -> float:

@@ -217,6 +217,49 @@ func _post(path: String, body: Dictionary, bearer: String = "") -> Dictionary:
 	return await _request(HTTPClient.METHOD_POST, path, body, bearer)
 
 
+func _ensure_token() -> bool:
+	## Il permesso di accesso dura un'ora: se sta scadendo lo rinnova.
+	if access_token != "" and Time.get_unix_time_from_system() < expires_at - 60.0:
+		return true
+	if refresh_token == "":
+		return false
+	var res: Dictionary = await _post("/auth/v1/token?grant_type=refresh_token", {"refresh_token": refresh_token})
+	if not _succeeded(res):
+		return false
+	_apply_session(res["data"])
+	return true
+
+
+func fetch_wins() -> Dictionary:
+	## Legge dal profilo le vittorie totali.
+	if not await _ensure_token():
+		return {"ok": false}
+	var res: Dictionary = await _request(HTTPClient.METHOD_GET, "/rest/v1/profiles?select=wins&id=eq." + user_id, {}, access_token)
+	if not _succeeded(res):
+		return {"ok": false}
+	var parsed: Variant = JSON.parse_string(str(res["text"]))
+	if typeof(parsed) != TYPE_ARRAY:
+		return {"ok": false}
+	var rows: Array = parsed
+	if rows.is_empty() or typeof(rows[0]) != TYPE_DICTIONARY:
+		return {"ok": false}
+	var row: Dictionary = rows[0]
+	return {"ok": true, "wins": int(row.get("wins", 0))}
+
+
+func add_wins(amount: int) -> Dictionary:
+	## Aggiunge vittorie al profilo e restituisce il nuovo totale.
+	if not await _ensure_token():
+		return {"ok": false}
+	var res: Dictionary = await _post("/rest/v1/rpc/add_wins", {"amount": amount}, access_token)
+	if not _succeeded(res):
+		return {"ok": false}
+	var text: String = str(res["text"]).strip_edges()
+	if not text.is_valid_int():
+		return {"ok": false}
+	return {"ok": true, "wins": int(text)}
+
+
 func _request(method: int, path: String, body: Dictionary, bearer: String = "") -> Dictionary:
 	var req := HTTPRequest.new()
 	req.timeout = 15.0
@@ -224,7 +267,8 @@ func _request(method: int, path: String, body: Dictionary, bearer: String = "") 
 	var headers := PackedStringArray(["Content-Type: application/json", "apikey: " + SUPABASE_KEY])
 	if bearer != "":
 		headers.append("Authorization: Bearer " + bearer)
-	var err: int = req.request(SUPABASE_URL + path, headers, method as HTTPClient.Method, JSON.stringify(body))
+	var payload: String = "" if method == HTTPClient.METHOD_GET else JSON.stringify(body)
+	var err: int = req.request(SUPABASE_URL + path, headers, method as HTTPClient.Method, payload)
 	if err != OK:
 		req.queue_free()
 		return {"network": false, "code": 0, "data": {}}

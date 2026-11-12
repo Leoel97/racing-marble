@@ -8,13 +8,16 @@ const UiScript := preload("res://scripts/ui.gd")
 const RoomScript := preload("res://scripts/room.gd")
 const AuthScript := preload("res://scripts/auth.gd")
 const AuthUiScript := preload("res://scripts/auth_ui.gd")
+const Catalog := preload("res://scripts/catalog.gd")
+const ProgressScript := preload("res://scripts/progress.gd")
+const CustomizeUiScript := preload("res://scripts/customize_ui.gd")
+const FinishFx := preload("res://scripts/finish_fx.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const FALL_DEPTH := 5.0
 const DEFAULT_SENSITIVITY := 2.5
-const PLAYER_COLOR := Color(0.90, 0.22, 0.27)
 
-enum State { MENU, COUNTDOWN, RACE, RESULTS }
+enum State { MENU, COUNTDOWN, RACE, RESULTS, CUSTOMIZE }
 
 var state: int = State.MENU
 var track: Node3D
@@ -24,6 +27,9 @@ var camera: Camera3D
 var ui: CanvasLayer
 var auth: Node
 var auth_ui: Control
+var progress: Node
+var customize_ui: Control
+var results_note: String = ""
 var cam_fwd: Vector3 = Vector3.FORWARD
 var menu_angle: float = 0.6
 
@@ -77,6 +83,16 @@ func _ready() -> void:
 	auth_ui.recover_requested.connect(_on_recover)
 	auth_ui.reset_requested.connect(_on_reset)
 
+	progress = ProgressScript.new()
+	add_child(progress)
+	customize_ui = CustomizeUiScript.new()
+	ui.base.add_child(customize_ui)
+	customize_ui.setup(ui)
+	customize_ui.previewed.connect(func(cfg: Dictionary) -> void: player.apply_look(cfg))
+	customize_ui.finish_previewed.connect(func(id: String) -> void: FinishFx.play(id, self, player))
+	customize_ui.saved.connect(_on_customize_saved)
+	ui.customize_pressed.connect(_open_customize)
+
 	_show_menu()
 	if smoke_test:
 		auth.use_local_profile("Tester")
@@ -108,6 +124,54 @@ func _boot_account() -> void:
 func _enter_menu() -> void:
 	auth_ui.close()
 	ui.set_account(auth.nickname, auth.email, auth.offline)
+	progress.load_for(auth.user_id)
+	player.apply_look(progress.config)
+	ui.set_wins(progress.total_wins())
+	_show_menu()
+	_sync_wins()
+
+
+func _sync_wins() -> void:
+	## Carica sul profilo le vittorie ottenute e rilegge il totale. Senza rete (o prima
+	## che il database sia pronto) restano contate sul telefono e si riprova piu' tardi.
+	if auth.user_id == "" or auth.user_id == "local":
+		return
+	if progress.pending > 0:
+		var amount: int = mini(progress.pending, 50)
+		var sent: Dictionary = await auth.add_wins(amount)
+		var sent_ok: bool = sent.get("ok", false)
+		if sent_ok:
+			progress.wins_synced = int(sent["wins"])
+			progress.pending -= amount
+			progress.save()
+	else:
+		var got: Dictionary = await auth.fetch_wins()
+		var got_ok: bool = got.get("ok", false)
+		if got_ok:
+			progress.wins_synced = int(got["wins"])
+			progress.save()
+	ui.set_wins(progress.total_wins())
+
+
+func _player_color() -> Color:
+	return Color(str(progress.config.get("color_a", "e63946")))
+
+
+# ------------------------------------------------------- personalizzazione
+
+func _open_customize() -> void:
+	state = State.CUSTOMIZE
+	ui.hide_all()
+	for bot in bots:
+		bot.visible = false
+	customize_ui.open(progress.config, progress.total_wins())
+
+
+func _on_customize_saved(config: Dictionary) -> void:
+	progress.set_config(config)
+	player.apply_look(progress.config)
+	for bot in bots:
+		bot.visible = true
 	_show_menu()
 
 
@@ -189,8 +253,17 @@ func _auth_check() -> void:
 
 func _build_world() -> void:
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.98, 0.93, 0.82)
+	# il cielo non si vede (siamo in una stanza) ma da' i riflessi ai materiali metallici
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.75, 0.86, 0.98)
+	sky_mat.sky_horizon_color = Color(1.0, 0.95, 0.85)
+	sky_mat.ground_bottom_color = Color(0.55, 0.40, 0.28)
+	sky_mat.ground_horizon_color = Color(0.95, 0.85, 0.70)
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(1.0, 0.97, 0.92)
 	env.ambient_light_energy = 0.65
@@ -219,7 +292,7 @@ func _build_world() -> void:
 	player = MarbleScript.new()
 	player.name = "Player"
 	player.track = track
-	player.body_color = PLAYER_COLOR
+	player.look = Catalog.default_config()
 	player.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
 	player.freeze = true
 	add_child(player)
@@ -230,6 +303,8 @@ func _build_world() -> void:
 		["Bot Verde", Color(0.16, 0.62, 0.56), 0.77, 0.8],
 		["Bot Giallo", Color(1.00, 0.82, 0.25), 0.83, 2.4],
 	]
+	var look_rng := RandomNumberGenerator.new()
+	look_rng.randomize()
 	for def: Array in bot_defs:
 		var bot: Node3D = AiScript.new()
 		add_child(bot)
@@ -237,7 +312,7 @@ func _build_world() -> void:
 		var bot_color: Color = def[1]
 		var bot_skill: float = def[2]
 		var bot_lane: float = def[3]
-		bot.setup(track, bot_name, bot_color, bot_skill, bot_lane)
+		bot.setup(track, bot_name, bot_color, bot_skill, bot_lane, Catalog.random_config(look_rng, bot_color.to_html(false)))
 		bots.append(bot)
 
 	camera = Camera3D.new()
@@ -349,7 +424,9 @@ func _tick_race(delta: float) -> void:
 			player.controls_enabled = false
 			player.linear_damp = 3.0
 			ui.pop("TRAGUARDO!", UiScript.YELLOW, 130)
-			results_delay = 2.0
+			results_delay = 2.6
+			FinishFx.play(str(progress.config.get("finish", "salto")), self, player)
+			_register_result()
 	else:
 		results_delay -= delta
 		if results_delay <= 0.0:
@@ -358,10 +435,28 @@ func _tick_race(delta: float) -> void:
 	_refresh_hud()
 
 
+func _register_result() -> void:
+	## Un primo posto vale una vittoria: si conta subito e si carica sul profilo.
+	results_note = ""
+	if _player_position() != 1:
+		return
+	var before: int = progress.total_wins()
+	progress.add_win()
+	var after: int = progress.total_wins()
+	ui.set_wins(after)
+	results_note = "Vittorie totali: %d" % after
+	var names: Array = []
+	for item: Dictionary in Catalog.newly_unlocked(before, after):
+		names.append(str(item["name"]))
+	if not names.is_empty():
+		results_note += "   ·   Nuovo sblocco: " + ", ".join(PackedStringArray(names)) + "!"
+	_sync_wins()
+
+
 func _refresh_hud() -> void:
 	var span: float = maxf(track.finish_s - track.start_s, 1.0)
 	var fractions: Array = [(player.progress - track.start_s) / span]
-	var colors: Array = [PLAYER_COLOR]
+	var colors: Array = [_player_color()]
 	for bot in bots:
 		fractions.append((bot.s - track.start_s) / span)
 		colors.append(bot.color)
@@ -372,7 +467,7 @@ func _refresh_hud() -> void:
 func _standings() -> Array:
 	## Ordina i 4 concorrenti: prima chi ha finito (per tempo), poi per avanzamento.
 	var rows: Array = []
-	rows.append({"name": _player_name(), "time": player_finish_time, "progress": player.progress, "color": PLAYER_COLOR, "is_player": true})
+	rows.append({"name": _player_name(), "time": player_finish_time, "progress": player.progress, "color": _player_color(), "is_player": true})
 	for bot in bots:
 		rows.append({"name": bot.display_name, "time": bot.finish_time, "progress": bot.s, "color": bot.color, "is_player": false})
 	rows.sort_custom(_compare_rows)
@@ -423,7 +518,7 @@ func _show_results() -> void:
 		var t: float = row["time"]
 		row["time_text"] = _format_time(t) if t >= 0.0 else "in gara"
 		log_text += "%d. %s %s\n" % [i + 1, row["name"], row["time_text"]]
-	ui.show_results(rows, _player_position())
+	ui.show_results(rows, _player_position(), results_note)
 	if smoke_test:
 		print("SMOKE RESULTS\n" + log_text)
 
@@ -432,6 +527,13 @@ func _show_results() -> void:
 
 func _update_camera(delta: float, snap: bool) -> void:
 	var target: Vector3 = player.get_global_transform_interpolated().origin
+	if state == State.CUSTOMIZE:
+		# Primo piano della biglia, spostata a sinistra per lasciare spazio alla scheda.
+		menu_angle += delta * 0.35
+		var side := Vector3(cos(menu_angle), 0.0, -sin(menu_angle))
+		camera.global_position = target + Vector3(sin(menu_angle) * 3.0, 1.1, cos(menu_angle) * 3.0)
+		camera.look_at(target + side * 1.25 + Vector3.UP * 0.1, Vector3.UP)
+		return
 	if state == State.MENU:
 		# Nel menu la camera gira lentamente attorno alla biglia sulla griglia di partenza.
 		menu_angle += delta * 0.25
@@ -487,8 +589,35 @@ func _run_shots() -> void:
 	await _shot("0e_nuova_password")
 	auth.use_local_profile("Lello")
 	_enter_menu()
+	progress.wins_synced = 9
+	progress.pending = 0
+	ui.set_wins(9)
 	await _wait(1.0)
 	await _shot("1_menu")
+	_open_customize()
+	await _wait(0.5)
+	await _shot("1a_biglia_materiale")
+	customize_ui._pick("oro")
+	await _wait(0.4)
+	await _shot("1b_biglia_bloccato")
+	customize_ui._open_tab("pattern")
+	customize_ui._pick("pois")
+	await _wait(0.4)
+	await _shot("1c_biglia_motivo")
+	customize_ui._open_tab("colors")
+	customize_ui._pick_color("color_a", "457bcc")
+	await _wait(0.4)
+	await _shot("1d_biglia_colori")
+	customize_ui._open_tab("finish")
+	customize_ui._pick("coriandoli")
+	await _wait(0.5)
+	await _shot("1e_biglia_traguardo")
+	customize_ui._done()
+	await _wait(0.3)
+	ui.open_wins()
+	await _wait(0.3)
+	await _shot("1f_vittorie")
+	ui.wins_screen.visible = false
 	ui.open_settings()
 	await _wait(0.3)
 	await _shot("2_impostazioni")

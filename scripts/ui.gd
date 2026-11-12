@@ -6,8 +6,10 @@ signal play_pressed
 signal menu_pressed
 signal settings_changed(sensitivity: float, invert: bool)
 signal logout_pressed
+signal customize_pressed
 
 const ProgressBarScript := preload("res://scripts/progress_bar.gd")
+const Catalog := preload("res://scripts/catalog.gd")
 
 const INK := Color(0.114, 0.169, 0.325)
 const YELLOW := Color(1.0, 0.824, 0.247)
@@ -38,6 +40,12 @@ var invert_btn: Button
 var play_btn: Button
 var name_label: Label
 var account_label: Label
+var results_note: Label
+var wins_screen: Control
+var wins_number: Label
+var wins_next: Label
+var wins_rows: VBoxContainer
+var _wins: int = 0
 
 var _invert: bool = false
 var _center_tween: Tween
@@ -66,9 +74,30 @@ func _ready() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_results()
 	_build_settings()
+	_build_wins()
 
 	_apply_safe_area()
 	get_viewport().size_changed.connect(_apply_safe_area)
+
+
+func _input(event: InputEvent) -> void:
+	## Toccando fuori dal campo di testo attivo la tastiera si chiude, ovunque nell'app.
+	var pressed: bool = false
+	var pos := Vector2.ZERO
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		pressed = touch.pressed
+		pos = touch.position
+	elif event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		pressed = click.pressed
+		pos = click.position
+	if not pressed:
+		return
+	var focus: Control = get_viewport().gui_get_focus_owner()
+	if focus is LineEdit and not focus.get_global_rect().has_point(pos):
+		focus.release_focus()
+		DisplayServer.virtual_keyboard_hide()
 
 
 # ------------------------------------------------------------- mattoncini
@@ -279,6 +308,15 @@ func _build_menu() -> void:
 	gear.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	gear.pressed.connect(open_settings)
 
+	var marble_btn := _button("LA MIA BIGLIA", 28, Color.WHITE, WHITE_DARK, Vector2(0, 84))
+	menu.add_child(marble_btn)
+	marble_btn.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 0)
+	marble_btn.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	marble_btn.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	marble_btn.offset_bottom = -18.0
+	marble_btn.offset_top = -18.0 - 84.0
+	marble_btn.pressed.connect(func() -> void: customize_pressed.emit())
+
 	var name_pill := PanelContainer.new()
 	name_pill.add_theme_stylebox_override("panel", _margins(_box(Color(INK, 0.9), 26, Color(0, 0, 0, 0.25), 5), 26.0, 6.0, 11.0))
 	name_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -301,10 +339,10 @@ func _build_settings() -> void:
 	var card := _card(620.0)
 	cc.add_child(card)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 16)
+	box.add_theme_constant_override("separation", 12)
 	card.add_child(box)
 
-	var title := _label("IMPOSTAZIONI", 46, INK)
+	var title := _label("IMPOSTAZIONI", 42, INK)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(title)
 
@@ -336,9 +374,13 @@ func _build_settings() -> void:
 	ends.add_child(_label("Alta", 22, INK.lightened(0.35), 0, false))
 	box.add_child(ends)
 
-	invert_btn = _button("", 30, ROW, WHITE_DARK, Vector2(0, 84))
+	invert_btn = _button("", 28, ROW, WHITE_DARK, Vector2(0, 80))
 	invert_btn.pressed.connect(_toggle_invert)
 	box.add_child(invert_btn)
+
+	var wins_btn := _button("VITTORIE E SBLOCCHI", 28, ROW, WHITE_DARK, Vector2(0, 80))
+	wins_btn.pressed.connect(open_wins)
+	box.add_child(wins_btn)
 
 	account_label = _label("", 22, INK.lightened(0.35), 0, false)
 	account_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -373,6 +415,7 @@ func set_account(nickname: String, email: String, offline: bool) -> void:
 
 
 func hide_all() -> void:
+	wins_screen.visible = false
 	menu.visible = false
 	hud.visible = false
 	results.visible = false
@@ -402,23 +445,118 @@ func close_settings() -> void:
 	settings.visible = false
 
 
+# ------------------------------------------------------- vittorie e sblocchi
+
+func _build_wins() -> void:
+	wins_screen = _overlay(0.6)
+	var cc: CenterContainer = wins_screen.get_meta("center")
+	var card := _card(760.0)
+	cc.add_child(card)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	card.add_child(box)
+
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 22)
+	box.add_child(head)
+	var badge := PanelContainer.new()
+	badge.add_theme_stylebox_override("panel", _margins(_box(YELLOW, 28, YELLOW_DARK, 8), 30.0, 0.0, 8.0))
+	head.add_child(badge)
+	wins_number = _label("0", 84, INK)
+	wins_number.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	wins_number.custom_minimum_size = Vector2(110, 0)
+	badge.add_child(wins_number)
+	var texts := VBoxContainer.new()
+	texts.alignment = BoxContainer.ALIGNMENT_CENTER
+	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	head.add_child(texts)
+	texts.add_child(_label("VITTORIE TOTALI", 38, INK))
+	wins_next = _label("", 24, INK.lightened(0.25), 0, false)
+	wins_next.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	wins_next.custom_minimum_size = Vector2(480, 0)
+	texts.add_child(wins_next)
+
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 330)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
+	wins_rows = VBoxContainer.new()
+	wins_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	wins_rows.add_theme_constant_override("separation", 8)
+	scroll.add_child(wins_rows)
+
+	var close := _button("CHIUDI", 34, YELLOW, YELLOW_DARK, Vector2(0, 84))
+	close.pressed.connect(func() -> void: wins_screen.visible = false)
+	box.add_child(close)
+	wins_screen.visible = false
+
+
+func set_wins(total: int) -> void:
+	_wins = total
+
+
+func open_wins() -> void:
+	## Elenco di tutto cio' che si sblocca con le vittorie e di quante ne mancano.
+	wins_number.text = str(_wins)
+	for child in wins_rows.get_children():
+		wins_rows.remove_child(child)
+		child.queue_free()
+	var next_text: String = "Hai sbloccato tutto!"
+	var found_next: bool = false
+	for item: Dictionary in Catalog.unlockables():
+		var need: int = item["wins"]
+		var item_name: String = item["name"]
+		var group: String = item["group"]
+		var group_name: String = Catalog.GROUP_NAMES[group]
+		var unlocked: bool = _wins >= need
+		var missing: int = need - _wins
+		if not unlocked and not found_next:
+			found_next = true
+			next_text = "Prossimo sblocco: %s (%s), tra %d %s." % [item_name, group_name.to_lower(), missing, "vittoria" if missing == 1 else "vittorie"]
+		var panel := PanelContainer.new()
+		panel.add_theme_stylebox_override("panel", _margins(_box(Color(0.86, 0.95, 0.90) if unlocked else ROW, 18), 20.0, 4.0, 6.0))
+		wins_rows.add_child(panel)
+		var line := HBoxContainer.new()
+		line.add_theme_constant_override("separation", 14)
+		panel.add_child(line)
+		var need_label := _label(str(need), 30, INK)
+		need_label.custom_minimum_size = Vector2(56, 0)
+		need_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		line.add_child(need_label)
+		var name_label2 := _label(item_name, 28, INK)
+		name_label2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		line.add_child(name_label2)
+		line.add_child(_label(group_name, 22, INK.lightened(0.35), 0, false))
+		var status: String = "Sbloccato" if unlocked else ("manca 1" if missing == 1 else "mancano %d" % missing)
+		var status_label := _label(status, 24, Color(0.10, 0.50, 0.36) if unlocked else INK, 0, unlocked)
+		status_label.custom_minimum_size = Vector2(150, 0)
+		status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		line.add_child(status_label)
+	wins_next.text = next_text
+	wins_screen.visible = true
+
+
 # ------------------------------------------------------------- classifica
 
 func _build_results() -> void:
 	results = _overlay(0.5)
 	var cc: CenterContainer = results.get_meta("center")
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 14)
+	column.add_theme_constant_override("separation", 6)
 	cc.add_child(column)
 
-	results_headline = _label("", 76, YELLOW, 22)
+	results_headline = _label("", 66, YELLOW, 20)
 	results_headline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(results_headline)
+
+	results_note = _label("", 28, Color.WHITE, 10)
+	results_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	column.add_child(results_note)
 
 	var card := _card(680.0)
 	column.add_child(card)
 	results_rows = VBoxContainer.new()
-	results_rows.add_theme_constant_override("separation", 10)
+	results_rows.add_theme_constant_override("separation", 8)
 	card.add_child(results_rows)
 
 	var buttons := HBoxContainer.new()
@@ -434,17 +572,19 @@ func _build_results() -> void:
 	results.visible = false
 
 
-func show_results(rows: Array, player_place: int) -> void:
+func show_results(rows: Array, player_place: int, note: String = "") -> void:
 	## rows: [{name, time_text, color, is_player}], gia' in ordine di arrivo.
 	for child in results_rows.get_children():
 		results_rows.remove_child(child)
 		child.queue_free()
 	results_headline.text = "HAI VINTO!" if player_place == 1 else "%d° POSTO" % player_place
+	results_note.text = note
+	results_note.visible = note != ""
 	for i in range(rows.size()):
 		var row: Dictionary = rows[i]
 		var is_player: bool = row["is_player"]
 		var panel := PanelContainer.new()
-		panel.add_theme_stylebox_override("panel", _margins(_box(YELLOW if is_player else ROW, 20), 22.0, 6.0, 8.0))
+		panel.add_theme_stylebox_override("panel", _margins(_box(YELLOW if is_player else ROW, 20), 22.0, 2.0, 4.0))
 		results_rows.add_child(panel)
 		var line := HBoxContainer.new()
 		line.add_theme_constant_override("separation", 18)
@@ -474,6 +614,7 @@ func show_results(rows: Array, player_place: int) -> void:
 # ----------------------------------------------------------------- stati
 
 func show_menu() -> void:
+	wins_screen.visible = false
 	menu.visible = true
 	hud.visible = false
 	results.visible = false
