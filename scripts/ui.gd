@@ -5,6 +5,7 @@ extends CanvasLayer
 signal play_pressed
 signal menu_pressed
 signal settings_changed(sensitivity: float, invert: bool)
+signal logout_pressed
 
 const ProgressBarScript := preload("res://scripts/progress_bar.gd")
 
@@ -35,6 +36,8 @@ var results_rows: VBoxContainer
 var sens_slider: HSlider
 var invert_btn: Button
 var play_btn: Button
+var name_label: Label
+var account_label: Label
 
 var _invert: bool = false
 var _center_tween: Tween
@@ -276,6 +279,14 @@ func _build_menu() -> void:
 	gear.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	gear.pressed.connect(open_settings)
 
+	var name_pill := PanelContainer.new()
+	name_pill.add_theme_stylebox_override("panel", _margins(_box(Color(INK, 0.9), 26, Color(0, 0, 0, 0.25), 5), 26.0, 6.0, 11.0))
+	name_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	menu.add_child(name_pill)
+	name_label = _label("", 34, Color.WHITE)
+	name_pill.add_child(name_label)
+	name_pill.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 0)
+
 	var version := _label("v" + str(ProjectSettings.get_setting("application/config/version", "")), 22, Color.WHITE, 8, false)
 	menu.add_child(version)
 	version.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 0)
@@ -329,9 +340,20 @@ func _build_settings() -> void:
 	invert_btn.pressed.connect(_toggle_invert)
 	box.add_child(invert_btn)
 
-	var close := _button("FATTO", 38, YELLOW, YELLOW_DARK, Vector2(0, 96))
+	account_label = _label("", 22, INK.lightened(0.35), 0, false)
+	account_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(account_label)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 18)
+	box.add_child(row)
+	var logout := _button("ESCI DALL'ACCOUNT", 26, Color.WHITE, WHITE_DARK, Vector2(0, 88))
+	logout.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	logout.pressed.connect(func() -> void: logout_pressed.emit())
+	row.add_child(logout)
+	var close := _button("FATTO", 36, YELLOW, YELLOW_DARK, Vector2(0, 88))
+	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	close.pressed.connect(close_settings)
-	box.add_child(close)
+	row.add_child(close)
 	settings.visible = false
 
 
@@ -339,6 +361,23 @@ func setup_settings(sensitivity: float, invert: bool) -> void:
 	_invert = invert
 	sens_slider.set_value_no_signal(clampf(sensitivity, SENS_MIN, SENS_MAX))
 	_refresh_invert()
+
+
+func set_account(nickname: String, email: String, offline: bool) -> void:
+	name_label.text = nickname
+	var line: String = email
+	if offline:
+		line = (email + "  ·  " if email != "" else "") + "senza connessione"
+	account_label.text = line
+	account_label.visible = line != ""
+
+
+func hide_all() -> void:
+	menu.visible = false
+	hud.visible = false
+	results.visible = false
+	settings.visible = false
+	clear_center()
 
 
 func _refresh_invert() -> void:

@@ -6,6 +6,8 @@ const MarbleScript := preload("res://scripts/marble.gd")
 const AiScript := preload("res://scripts/ai_marble.gd")
 const UiScript := preload("res://scripts/ui.gd")
 const RoomScript := preload("res://scripts/room.gd")
+const AuthScript := preload("res://scripts/auth.gd")
+const AuthUiScript := preload("res://scripts/auth_ui.gd")
 
 const SETTINGS_PATH := "user://settings.cfg"
 const FALL_DEPTH := 5.0
@@ -20,6 +22,8 @@ var player: RigidBody3D
 var bots: Array[Node3D] = []
 var camera: Camera3D
 var ui: CanvasLayer
+var auth: Node
+var auth_ui: Control
 var cam_fwd: Vector3 = Vector3.FORWARD
 var menu_angle: float = 0.6
 
@@ -56,13 +60,97 @@ func _ready() -> void:
 	ui.play_pressed.connect(_start_race)
 	ui.menu_pressed.connect(_show_menu)
 	ui.settings_changed.connect(_on_settings_changed)
+	ui.logout_pressed.connect(_on_logout)
+
+	auth = AuthScript.new()
+	add_child(auth)
+	auth_ui = AuthUiScript.new()
+	ui.base.add_child(auth_ui)
+	auth_ui.setup(ui)
+	auth_ui.login_requested.connect(_on_login)
+	auth_ui.register_requested.connect(_on_register)
+	auth_ui.verify_requested.connect(_on_verify)
+	auth_ui.resend_requested.connect(_on_resend)
+
 	_show_menu()
 	if smoke_test:
+		auth.use_local_profile("Tester")
+		_enter_menu()
 		_start_race()
 		countdown = 0.1
 		player.auto_steer = true
+		_auth_check()
 	elif shots_dir != "":
 		_run_shots()
+	else:
+		_boot_account()
+
+
+# ---------------------------------------------------------------- account
+
+func _boot_account() -> void:
+	## All'avvio: riprende la sessione salvata, altrimenti mostra l'accesso.
+	ui.hide_all()
+	await auth.restore()
+	if auth.is_logged_in():
+		_enter_menu()
+	else:
+		auth_ui.open_login()
+
+
+func _enter_menu() -> void:
+	auth_ui.close()
+	ui.set_account(auth.nickname, auth.email, auth.offline)
+	_show_menu()
+
+
+func _finish_auth(result: Dictionary, email: String) -> void:
+	auth_ui.set_busy(false)
+	var ok: bool = result.get("ok", false)
+	var needs_verify: bool = result.get("needs_verify", false)
+	if ok:
+		_enter_menu()
+	elif needs_verify:
+		auth_ui.open_verify(email)
+	else:
+		auth_ui.show_error(str(result.get("error", "")))
+
+
+func _on_login(email: String, password: String) -> void:
+	auth_ui.set_busy(true)
+	_finish_auth(await auth.sign_in(email, password), email)
+
+
+func _on_register(nickname: String, email: String, password: String) -> void:
+	auth_ui.set_busy(true)
+	_finish_auth(await auth.sign_up(nickname, email, password), email)
+
+
+func _on_verify(email: String, code: String) -> void:
+	auth_ui.set_busy(true)
+	_finish_auth(await auth.verify(email, code), email)
+
+
+func _on_resend(email: String) -> void:
+	auth_ui.set_busy(true)
+	var result: Dictionary = await auth.resend(email)
+	auth_ui.set_busy(false)
+	var ok: bool = result.get("ok", false)
+	auth_ui.show_info("Codice inviato di nuovo." if ok else str(result.get("error", "")))
+
+
+func _on_logout() -> void:
+	await auth.sign_out()
+	state = State.MENU
+	_reset_race()
+	ui.hide_all()
+	auth_ui.open_login()
+
+
+func _auth_check() -> void:
+	## Test automatico: verifica che Supabase risponda, usando credenziali finte.
+	var result: Dictionary = await auth.sign_in("nessuno@example.com", "Sbagliata-123")
+	print("AUTHCHECK ok=%s code=%s error=%s" % [result.get("ok", false), result.get("code", ""), result.get("error", "")])
 
 
 # ------------------------------------------------------------------ mondo
@@ -252,11 +340,15 @@ func _refresh_hud() -> void:
 func _standings() -> Array:
 	## Ordina i 4 concorrenti: prima chi ha finito (per tempo), poi per avanzamento.
 	var rows: Array = []
-	rows.append({"name": "Tu", "time": player_finish_time, "progress": player.progress, "color": PLAYER_COLOR, "is_player": true})
+	rows.append({"name": _player_name(), "time": player_finish_time, "progress": player.progress, "color": PLAYER_COLOR, "is_player": true})
 	for bot in bots:
 		rows.append({"name": bot.display_name, "time": bot.finish_time, "progress": bot.s, "color": bot.color, "is_player": false})
 	rows.sort_custom(_compare_rows)
 	return rows
+
+
+func _player_name() -> String:
+	return auth.nickname if auth != null and auth.nickname != "" else "Tu"
 
 
 func _compare_rows(a: Dictionary, b: Dictionary) -> bool:
@@ -344,6 +436,19 @@ func _shot(shot_name: String) -> void:
 func _run_shots() -> void:
 	## Gioca una gara da solo e salva un'immagine di ogni schermata.
 	DirAccess.make_dir_recursive_absolute(shots_dir)
+	ui.hide_all()
+	auth_ui.open_login()
+	await _wait(0.6)
+	await _shot("0a_accedi")
+	auth_ui.open_register()
+	auth_ui.show_error("Esiste già un account con questa email.")
+	await _wait(0.3)
+	await _shot("0b_registrati")
+	auth_ui.open_verify("lello@example.com")
+	await _wait(0.3)
+	await _shot("0c_codice")
+	auth.use_local_profile("Lello")
+	_enter_menu()
 	await _wait(1.0)
 	await _shot("1_menu")
 	ui.open_settings()
