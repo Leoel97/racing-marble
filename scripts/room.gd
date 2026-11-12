@@ -331,7 +331,7 @@ func _round_things() -> void:
 		disc.height = 0.3
 		disc.radial_segments = 40
 		var col: Color = ring[1]
-		_round(disc, col, rug_pos + Vector3(0, 0.15 + n * 0.06, 0))
+		_round(disc, col, rug_pos + Vector3(0, 0.15 + n * 0.2, 0))
 	# pallone
 	var ball := SphereMesh.new()
 	ball.radius = 9.0
