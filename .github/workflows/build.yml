@@ -86,6 +86,12 @@ jobs:
           fi
           grep -q "SMOKE" run.log || { echo "::error::Il test non e' partito"; exit 1; }
 
+      - name: Verifica collegamento a Supabase
+        run: |
+          timeout 60 godot --headless -- --authcheck 2>&1 | tee auth.log || true
+          grep "AUTHCHECK" auth.log
+          grep -q "AUTHCHECK ok=false code=invalid_credentials" auth.log || { echo "::error::Supabase non ha risposto come previsto"; exit 1; }
+
       - name: Schermate per la revisione
         continue-on-error: true
         run: |

@@ -41,6 +41,7 @@ var sensitivity: float = DEFAULT_SENSITIVITY
 var smoke_test: bool = false
 var smoke_frames: int = 0
 var shots_dir: String = ""
+var auth_check_only: bool = false
 
 
 func _ready() -> void:
@@ -50,6 +51,8 @@ func _ready() -> void:
 	for arg: String in OS.get_cmdline_user_args():
 		if arg == "--autostart":
 			smoke_test = true
+		elif arg == "--authcheck":
+			auth_check_only = true
 		elif arg.begins_with("--shots="):
 			shots_dir = arg.trim_prefix("--shots=")
 	_load_settings()
@@ -79,7 +82,9 @@ func _ready() -> void:
 		_start_race()
 		countdown = 0.1
 		player.auto_steer = true
-		_auth_check()
+	elif auth_check_only:
+		await _auth_check()
+		get_tree().quit()
 	elif shots_dir != "":
 		_run_shots()
 	else:
