@@ -55,6 +55,40 @@ func verify(verify_email: String, code: String) -> Dictionary:
 	return {"ok": true}
 
 
+func nickname_available(candidate: String) -> Dictionary:
+	## Chiede a Supabase se il nickname e' libero. "checked" e' false se non si e' potuto
+	## verificare (senza rete, o tabella non ancora creata): in quel caso decide il server.
+	var res: Dictionary = await _post("/rest/v1/rpc/nickname_available", {"candidate": candidate})
+	if not _succeeded(res):
+		var reached: bool = res["network"]
+		return {"checked": false, "available": true, "network": reached}
+	var text: String = str(res["text"]).strip_edges()
+	return {"checked": true, "available": text == "true", "network": true}
+
+
+func request_password_reset(reset_email: String) -> Dictionary:
+	## Manda via mail il codice per reimpostare la password.
+	var res: Dictionary = await _post("/auth/v1/recover", {"email": reset_email})
+	if not _succeeded(res):
+		return _failure(res)
+	return {"ok": true}
+
+
+func reset_password(reset_email: String, code: String, new_password: String) -> Dictionary:
+	## Verifica il codice ricevuto e imposta la nuova password; al termine si e' dentro.
+	var res: Dictionary = await _post("/auth/v1/verify", {"type": "recovery", "email": reset_email, "token": code})
+	if not _succeeded(res):
+		return _failure(res)
+	var data: Dictionary = res["data"]
+	if not data.has("access_token"):
+		return {"ok": false, "needs_verify": false, "error": "Codice errato o scaduto."}
+	_apply_session(data)
+	var upd: Dictionary = await _request(HTTPClient.METHOD_PUT, "/auth/v1/user", {"password": new_password}, access_token)
+	if not _succeeded(upd):
+		return _failure(upd)
+	return {"ok": true}
+
+
 func resend(verify_email: String) -> Dictionary:
 	var res: Dictionary = await _post("/auth/v1/resend", {"type": "signup", "email": verify_email})
 	if not _succeeded(res):
@@ -161,10 +195,14 @@ func _failure(res: Dictionary) -> Dictionary:
 			text = "Troppe richieste. Riprova tra qualche minuto."
 		"email_address_invalid", "validation_failed":
 			text = "Controlla i dati inseriti."
+		"same_password":
+			text = "La nuova password deve essere diversa dalla precedente."
 		"signup_disabled":
 			text = "Le registrazioni sono chiuse."
 		_:
-			if raw.findn("already registered") >= 0:
+			if raw.findn("database error saving new user") >= 0:
+				text = "Questo nickname è già stato scelto. Provane un altro."
+			elif raw.findn("already registered") >= 0:
 				text = "Esiste già un account con questa email."
 			elif raw.findn("not confirmed") >= 0:
 				return {"ok": false, "needs_verify": true, "error": ""}
@@ -176,13 +214,17 @@ func _failure(res: Dictionary) -> Dictionary:
 
 
 func _post(path: String, body: Dictionary, bearer: String = "") -> Dictionary:
+	return await _request(HTTPClient.METHOD_POST, path, body, bearer)
+
+
+func _request(method: int, path: String, body: Dictionary, bearer: String = "") -> Dictionary:
 	var req := HTTPRequest.new()
 	req.timeout = 15.0
 	add_child(req)
 	var headers := PackedStringArray(["Content-Type: application/json", "apikey: " + SUPABASE_KEY])
 	if bearer != "":
 		headers.append("Authorization: Bearer " + bearer)
-	var err: int = req.request(SUPABASE_URL + path, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
+	var err: int = req.request(SUPABASE_URL + path, headers, method as HTTPClient.Method, JSON.stringify(body))
 	if err != OK:
 		req.queue_free()
 		return {"network": false, "code": 0, "data": {}}
@@ -191,8 +233,10 @@ func _post(path: String, body: Dictionary, bearer: String = "") -> Dictionary:
 	var result: int = res[0]
 	var code: int = res[1]
 	var raw: PackedByteArray = res[3]
-	var parsed: Variant = JSON.parse_string(raw.get_string_from_utf8())
+	var text: String = raw.get_string_from_utf8()
 	var data: Dictionary = {}
-	if typeof(parsed) == TYPE_DICTIONARY:
-		data = parsed
-	return {"network": result == HTTPRequest.RESULT_SUCCESS, "code": code, "data": data}
+	if text.begins_with("{"):
+		var parsed: Variant = JSON.parse_string(text)
+		if typeof(parsed) == TYPE_DICTIONARY:
+			data = parsed
+	return {"network": result == HTTPRequest.RESULT_SUCCESS, "code": code, "data": data, "text": text}

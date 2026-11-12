@@ -6,6 +6,11 @@ signal login_requested(email: String, password: String)
 signal register_requested(nickname: String, email: String, password: String)
 signal verify_requested(email: String, code: String)
 signal resend_requested(email: String)
+signal recover_requested(email: String)
+signal reset_requested(email: String, code: String, password: String)
+
+## Recupero password: si accende insieme alla conferma email, per il rilascio.
+const EMAIL_FEATURES_ENABLED := false
 
 var ui: CanvasLayer
 var scroll: ScrollContainer
@@ -23,6 +28,11 @@ var reg_password: LineEdit
 var verify_code: LineEdit
 var verify_text: Label
 var verify_email: String = ""
+var recover_email: LineEdit
+var reset_code: LineEdit
+var reset_password: LineEdit
+var reset_text: Label
+var reset_email: String = ""
 
 var _kb_units: float = 0.0
 
@@ -56,6 +66,8 @@ func setup(ui_ref: CanvasLayer) -> void:
 	_build_login(column)
 	_build_register(column)
 	_build_verify(column)
+	_build_recover(column)
+	_build_reset(column)
 
 	error_label = ui._label("", 24, Color(0.85, 0.16, 0.22), 0, false)
 	error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -162,6 +174,10 @@ func _build_login(parent: Control) -> void:
 	var link := _link("Non hai un account? Registrati")
 	link.pressed.connect(open_register)
 	box.add_child(link)
+	var forgot := _link("Password dimenticata?")
+	forgot.pressed.connect(open_recover)
+	forgot.visible = EMAIL_FEATURES_ENABLED
+	box.add_child(forgot)
 
 
 func _build_register(parent: Control) -> void:
@@ -206,6 +222,79 @@ func _build_verify(parent: Control) -> void:
 	box.add_child(back)
 
 
+func _build_recover(parent: Control) -> void:
+	var box := _page(parent, "recover")
+	box.add_child(_title("PASSWORD DIMENTICATA"))
+	var text: Label = ui._label("Scrivi la tua email: ti mandiamo un codice per sceglierne una nuova.", 26, ui.INK, 0, false)
+	text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	text.custom_minimum_size = Vector2(560, 0)
+	box.add_child(text)
+	recover_email = _field("Email", LineEdit.KEYBOARD_TYPE_EMAIL_ADDRESS, false, 120)
+	box.add_child(recover_email)
+	var go := _action("INVIA IL CODICE")
+	go.pressed.connect(_submit_recover)
+	box.add_child(go)
+	var back := _link("Torna all'accesso")
+	back.pressed.connect(open_login)
+	box.add_child(back)
+
+
+func _build_reset(parent: Control) -> void:
+	var box := _page(parent, "reset")
+	box.add_child(_title("NUOVA PASSWORD"))
+	reset_text = ui._label("", 24, ui.INK, 0, false)
+	reset_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reset_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	reset_text.custom_minimum_size = Vector2(560, 0)
+	box.add_child(reset_text)
+	reset_code = _field("Codice a 8 cifre", LineEdit.KEYBOARD_TYPE_NUMBER, false, 8)
+	box.add_child(reset_code)
+	reset_password = _field("Nuova password", LineEdit.KEYBOARD_TYPE_PASSWORD, true, 72)
+	box.add_child(reset_password)
+	var hint: Label = ui._label("Almeno 8 caratteri con maiuscole, minuscole, numeri e simboli", 20, ui.INK.lightened(0.35), 0, false)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(hint)
+	var go := _action("CAMBIA PASSWORD")
+	go.pressed.connect(_submit_reset)
+	box.add_child(go)
+	var back := _link("Torna all'accesso")
+	back.pressed.connect(open_login)
+	box.add_child(back)
+
+
+func open_recover() -> void:
+	recover_email.text = login_email.text
+	_show_page("recover")
+
+
+func open_reset(email: String) -> void:
+	reset_email = email
+	reset_text.text = "Codice inviato a %s" % email
+	reset_code.text = ""
+	reset_password.text = ""
+	_show_page("reset")
+
+
+func _submit_recover() -> void:
+	var email: String = recover_email.text.strip_edges()
+	if not _valid_email(email):
+		show_error("Scrivi un indirizzo email valido.")
+		return
+	recover_requested.emit(email)
+
+
+func _submit_reset() -> void:
+	var code: String = reset_code.text.strip_edges()
+	if code.length() < 6:
+		show_error("Scrivi il codice che hai ricevuto via mail.")
+		return
+	if not _valid_password(reset_password.text):
+		show_error("La password deve avere almeno 8 caratteri con maiuscole, minuscole, numeri e simboli.")
+		return
+	reset_requested.emit(reset_email, code, reset_password.text)
+
+
 func _show_page(key: String) -> void:
 	for k: String in pages:
 		var page: Control = pages[k]
@@ -234,6 +323,7 @@ func close() -> void:
 	visible = false
 	login_password.text = ""
 	reg_password.text = ""
+	reset_password.text = ""
 	DisplayServer.virtual_keyboard_hide()
 
 

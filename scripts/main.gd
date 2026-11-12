@@ -74,6 +74,8 @@ func _ready() -> void:
 	auth_ui.register_requested.connect(_on_register)
 	auth_ui.verify_requested.connect(_on_verify)
 	auth_ui.resend_requested.connect(_on_resend)
+	auth_ui.recover_requested.connect(_on_recover)
+	auth_ui.reset_requested.connect(_on_reset)
 
 	_show_menu()
 	if smoke_test:
@@ -128,6 +130,13 @@ func _on_login(email: String, password: String) -> void:
 
 func _on_register(nickname: String, email: String, password: String) -> void:
 	auth_ui.set_busy(true)
+	var check: Dictionary = await auth.nickname_available(nickname)
+	var checked: bool = check["checked"]
+	var available: bool = check["available"]
+	if checked and not available:
+		auth_ui.set_busy(false)
+		auth_ui.show_error("Questo nickname è già stato scelto. Provane un altro.")
+		return
 	_finish_auth(await auth.sign_up(nickname, email, password), email)
 
 
@@ -144,6 +153,22 @@ func _on_resend(email: String) -> void:
 	auth_ui.show_info("Codice inviato di nuovo." if ok else str(result.get("error", "")))
 
 
+func _on_recover(email: String) -> void:
+	auth_ui.set_busy(true)
+	var result: Dictionary = await auth.request_password_reset(email)
+	auth_ui.set_busy(false)
+	var ok: bool = result.get("ok", false)
+	if ok:
+		auth_ui.open_reset(email)
+	else:
+		auth_ui.show_error(str(result.get("error", "")))
+
+
+func _on_reset(email: String, code: String, password: String) -> void:
+	auth_ui.set_busy(true)
+	_finish_auth(await auth.reset_password(email, code, password), email)
+
+
 func _on_logout() -> void:
 	await auth.sign_out()
 	state = State.MENU
@@ -156,6 +181,8 @@ func _auth_check() -> void:
 	## Test automatico: verifica che Supabase risponda, usando credenziali finte.
 	var result: Dictionary = await auth.sign_in("nessuno@example.com", "Sbagliata-123")
 	print("AUTHCHECK ok=%s code=%s error=%s" % [result.get("ok", false), result.get("code", ""), result.get("error", "")])
+	var nick: Dictionary = await auth.nickname_available("zz_prova_build")
+	print("NICKCHECK checked=%s available=%s" % [nick["checked"], nick["available"]])
 
 
 # ------------------------------------------------------------------ mondo
@@ -452,6 +479,12 @@ func _run_shots() -> void:
 	auth_ui.open_verify("lello@example.com")
 	await _wait(0.3)
 	await _shot("0c_codice")
+	auth_ui.open_recover()
+	await _wait(0.3)
+	await _shot("0d_password_dimenticata")
+	auth_ui.open_reset("lello@example.com")
+	await _wait(0.3)
+	await _shot("0e_nuova_password")
 	auth.use_local_profile("Lello")
 	_enter_menu()
 	await _wait(1.0)

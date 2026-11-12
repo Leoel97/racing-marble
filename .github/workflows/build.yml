@@ -89,7 +89,7 @@ jobs:
       - name: Verifica collegamento a Supabase
         run: |
           timeout 60 godot --headless -- --authcheck 2>&1 | tee auth.log || true
-          grep "AUTHCHECK" auth.log
+          grep -E "AUTHCHECK|NICKCHECK" auth.log
           grep -q "AUTHCHECK ok=false code=invalid_credentials" auth.log || { echo "::error::Supabase non ha risposto come previsto"; exit 1; }
 
       - name: Schermate per la revisione
